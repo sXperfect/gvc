@@ -1,53 +1,11 @@
-# Genomic Variant Codec (GVC)
-
-Open Source Genotype Compressor
-
----
-
-## Usage policy
-
-The open source GVC codec is made available before scientific publication.
-
-This pre-publication software is preliminary and may contain errors.
-The software is provided in good faith, but without any express or implied warranties.
-We refer the reader to our [license](LICENSE).
-
-The goal of our policy is that early release should enable the progress of science.
-We kindly ask to refrain from publishing analyses that were conducted using this software while its development is in progress.
-
---- 
-## Dependencies
-
-* Python 3.6
-* virtualenv
-* numpy
-* cython
-* numba
-* cyvcf2
-* scipy
-* tspsolve
-* Pillow
-
----
-## Building
-
-Clone this repository:
-
-    TODO
-
-Run setup script `setup.sh`
-
-    bash setup.sh
-
-This will create a virtual environment with all dependencies installed.
-The newly created virtual environment will be located in `tmp/venv`.
 
 In order to encode or decode the payloads based on JBIG codec, an external executable is required.
 You can use any of the existing and publicly available JBIG codec implementation.
 Here we provides an example based on [JBIG-KIT](https://www.cl.cam.ac.uk/~mgk25/jbigkit/).
 First, jbig must be downloaded into folder `third_party` and compiled.
 
-Two functions are required to integrate jbig-kit, one for the encoding process and the other one for the decoding process.
+In order to integrate jbig-kit, two functions are required.
+One for the encoding process and the other one for the decoding process.
 The functions call jbig executeable and then the compressed payload is read.
 We create a new file called `jbigkit.py`
 

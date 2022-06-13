@@ -1,0 +1,34 @@
+data
+build
+tmp
+datasets
+
+*.so
+*.html
+gvc/**/*.cpp
+
+### Generic ###
+#
+tmp/
+
+# Dolphin directory attributes files
+.directory
+
+# macOS Finder directory attributes files
+.DS_Store
+
+### IDE ###
+# PyCharm project directory
+.idea/
+
+# Visual Studio Code workspace settings
+.vscode/
+
+### Python ###
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+# Virtual environment directory
+.venv/
+
+*.npz
