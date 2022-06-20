@@ -1,4 +1,6 @@
-from multiprocessing.sharedctypes import Value
+from os import makedirs
+from os.path import join, exists
+from shutil import rmtree
 import time
 import logging as log
 
@@ -33,44 +35,82 @@ def get_phase(gt, new_p, i):
         return False
 v_get_phase = np.vectorize(get_phase)
 
-def vcf_genotypes_reader(fpath, block_size):
+def reshape_trans_mat(mat, axis):
+    block_size, num_samples, p = mat.shape
+    
+    if axis == 1:
+        trans_mat = np.concatenate(np.split(mat, num_samples, axis=axis), axis=-1).reshape(block_size, -1)
+    elif axis == 2 or axis == -1:
+        trans_mat = np.concatenate(np.split(mat, p, axis=axis), axis=1).reshape(block_size, -1)
+    else:
+        raise ValueError("Invalid axis value!")
+        
+    return trans_mat
+
+def vcf_genotypes_reader(fpath, out_fpath, block_size):
 
     vcf_f = VCF(fpath, strict_gt=True, gts012=True)
     num_samples = len(vcf_f.samples)
+    
+    metadata_dpath = join(f'{out_fpath}.metadata')
+    
+    if exists(metadata_dpath):
+        rmtree(metadata_dpath)
+        
+    makedirs(metadata_dpath)
+    
+    # samples = vcf_f.raw_header.strip().split('\n')[-1].split('\t')[9:]
+    # header_fpath = f"{out_fpath}.header"
+    header_fpath = join(metadata_dpath, 'header.txt')
+    with open(header_fpath, 'w') as f:
+        f.write(vcf_f.raw_header)
 
     assert block_size > 0, "Block size must be >= 1"
+    
+    min_max_pos_list = []
 
     i_var = 0
     stime = time.time()
+    p = 0
+    block_id = 0
     for variant in iter(vcf_f):
         p = variant.ploidy
 
         if i_var == 0:
-            if p > 2:
-                raise NotImplementedError("Currently support only ploidy <= 2!")
+            #TODO: is int8 as the datatype correct? genotypes is int16
+            allele_matrix = np.empty((block_size, num_samples, p), dtype=np.int8) 
+            phase_matrix = np.empty((block_size, num_samples, (p-1)), dtype=bool)
+            pos_arr = np.empty(block_size, np.uint64)
 
-            allele_matrix = np.empty((block_size, p*num_samples), dtype=np.int8)
-            phase_matrix = np.empty((block_size, (p-1)*num_samples), dtype=bool)
-
-        # try:
-        cyvcf_gt_matrix = np.array(variant.genotypes, dtype=np.int8)
-        allele_matrix[i_var, :] = np.concatenate(cyvcf_gt_matrix[:, :p])
+        pos_arr[i_var] = variant.POS
+        
+        genotypes = variant.genotype.array() #? int16
+        allele_matrix[i_var, :, :] = genotypes[:, :p]
 
         try:
-            phase_matrix[i_var, :] = np.concatenate(cyvcf_gt_matrix[:, p:])
+            phase_matrix[i_var, :, :] = genotypes[:, p:]
         except:
             pass
-        
-        # except:
 
         i_var += 1
         
         if i_var == block_size:
             log.info('Parsing time: {:.03f}'.format(time.time() - stime))
 
-             # TODO: handle not_available?
             allele_matrix, any_missing, not_available = gvc.binarization.adaptive_max_value(allele_matrix)
 
+            allele_matrix = reshape_trans_mat(allele_matrix, 1)
+            phase_matrix = reshape_trans_mat(phase_matrix, 1)
+            
+            np.save(
+                # f"{out_fpath}.{block_id:04d}",
+                join(metadata_dpath, f"{block_id}"),
+                pos_arr
+            )
+            
+            min_max_pos = np.array([pos_arr.min(), pos_arr.max()], dtype=np.uint64)
+            min_max_pos_list.append(min_max_pos)
+            
             yield (
                 allele_matrix, 
                 phase_matrix, 
@@ -80,16 +120,34 @@ def vcf_genotypes_reader(fpath, block_size):
             )
 
             i_var = 0
+            block_id += 1
             stime = time.time()
 
     vcf_f.close()
 
-    # TODO: what happer for not_available?
+    subpos_array = pos_arr[:i_var]
     suballele_matrix, any_missing, not_available = gvc.binarization.adaptive_max_value(allele_matrix[:i_var, :])
-
+    subphase_matrix = phase_matrix[:i_var, :]
+    
+    suballele_matrix = reshape_trans_mat(suballele_matrix, 1)
+    subphase_matrix = reshape_trans_mat(subphase_matrix, 1)
+    
+    np.save(
+        join(metadata_dpath, f"{block_id}"),
+        subpos_array
+    )
+    
+    min_max_pos = np.array([pos_arr.min(), pos_arr.max()], dtype=np.uint64)
+    min_max_pos_list.append(min_max_pos)
+    
+    np.save(
+        join(metadata_dpath, "main"),
+        np.stack(min_max_pos_list)
+    )
+                
     yield (
         suballele_matrix,
-        phase_matrix[:i_var, :],
+        subphase_matrix,
         p, 
         any_missing,
         not_available

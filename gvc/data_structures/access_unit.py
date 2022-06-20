@@ -1,4 +1,3 @@
-from asyncio import constants
 from ctypes import util
 from dataclasses import dataclass
 import logging as log
@@ -58,11 +57,12 @@ class AccessUnitHeader(DataUnitHeader):
         cls, 
         bitstream_reader:BitstreamReader
     ):
-        content_len = bitstream_reader.read_bytes(constants.DATA_UNIT_SIZE_LEN)
+        total_len = bitstream_reader.read_bytes(consts.DATA_UNIT_SIZE_LEN, ret_int=True)
+        content_len = total_len - (consts.DATA_UNIT_TYPE_LEN + consts.DATA_UNIT_SIZE_LEN)
 
-        access_unit_id = bitstream_reader.read_bytes(consts.ACCESS_UNIT_ID_LEN)
-        parameter_set_id = bitstream_reader.read_bytes(consts.PARAMETER_SET_ID_LEN)
-        num_blocks = bitstream_reader.read_bytes(consts.NUM_BLOCKS_LEN)
+        access_unit_id = bitstream_reader.read_bytes(consts.ACCESS_UNIT_ID_LEN, ret_int=True)
+        parameter_set_id = bitstream_reader.read_bytes(consts.PARAMETER_SET_ID_LEN, ret_int=True)
+        num_blocks = bitstream_reader.read_bytes(consts.NUM_BLOCKS_LEN, ret_int=True)
 
         assert bitstream_reader._byte_aligned(), "Byte not aligned"
 

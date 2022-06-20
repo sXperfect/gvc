@@ -1,6 +1,6 @@
 import logging as log
 import numpy as np
-from .utils import int2bstr
+from .utils import bstr2int, int2bstr
 
 class BitstreamWriter(object):
     def __init__(self, f):
@@ -120,8 +120,19 @@ class BitstreamReader(object):
             v = (v << 1) | self._read_bit()
         return v
 
-    def read_bytes(self, n):
-        return self.read_bits(n*8)
+    # #TODO: Faster read_byte
+    # def read_bytes(self, n):
+    #     return self.read_bits(n*8)
+    
+    def read_bytes(self, n, ret_int=False):
+        assert self._byte_aligned()
+        
+        payload = self.input.read(n)
+        
+        if ret_int:
+            return bstr2int(payload)
+        else:
+            return payload
 
     def seek(self, offset, whence=0):
         self._reset()
@@ -138,7 +149,7 @@ class BitstreamReader(object):
 
 class RandomAccessHandler(object):
 
-    def __init__(self, f, start_pos, length, autoseek=False):
+    def __init__(self, f:BitstreamReader, start_pos, length, autoseek=False):
         self.f = f
         self.start_pos = start_pos
         self.length = length
@@ -156,7 +167,7 @@ class RandomAccessHandler(object):
             return self.f.read(self.length)
 
         elif nbytes <= self.length:
-            return self.f.read(nbytes)
+            return self.f.read_bytes(nbytes)
 
     # To automate read()
     def __radd__(self, other):

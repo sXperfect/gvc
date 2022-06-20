@@ -26,8 +26,8 @@ class BlockHeader():
         bitstream_reader:BitstreamReader
     ):
 
-        content_id = bitstream_reader.read_bytes(consts.CONTENT_ID_LEN)
-        block_payload_size = bitstream_reader.read_bytes(consts.BLOCK_PAYLOAD_SIZE_LEN)
+        content_id = bitstream_reader.read_bytes(consts.CONTENT_ID_LEN, ret_int=True)
+        block_payload_size = bitstream_reader.read_bytes(consts.BLOCK_PAYLOAD_SIZE_LEN, ret_int=True)
         return cls(content_id, block_payload_size)
 
 

@@ -111,7 +111,7 @@ The coding of a genotype matrix G comprises the following steps:
    matrix P
 """
 
-import os
+# import os
 import sys
 import logging as log
 
@@ -124,11 +124,11 @@ import gvc.sort
 from .settings import PROGRAM_NAME, PROGRAM_DESC, LOG_LEVELS
 
 def run(args, run_as_module: bool):
-    # Basic log config
+    #? Basic log config
     format_string = '[' + PROGRAM_NAME + '] [%(asctime)s] [%(levelname)-8s] --- [%(processName)-11s] [%(filename)15s] [%(funcName)20s] %(message)s'
     log.basicConfig(format=format_string, level=log.INFO)
 
-    # Log level
+    #? Log level
     try:
         log_level = LOG_LEVELS[args.log_level]
     except KeyError:
@@ -137,52 +137,63 @@ def run(args, run_as_module: bool):
     logger = log.getLogger()
     logger.setLevel(log_level)
 
-    # Print banner
+    #? Print banner
     log.info('********************************************************************************')
     log.info('    {}'.format(PROGRAM_NAME))
     log.info('    {}'.format(PROGRAM_DESC))
     log.info('********************************************************************************')
 
-    # Log whether we're running as module (i.e., python3 -m gvc) or script (i.e., python3 /path/to/app.py)
+    #? Log whether we're running as module (i.e., python3 -m gvc) or script (i.e., python3 /path/to/app.py)
     if run_as_module:
         log.debug('running as module')
     else:
         log.debug('running as script')
 
-    # Log the command line
+    #? Log the command line
     if not run_as_module:
         log.debug('command line: %s', ' '.join(sys.argv))
 
-    # Log the arguments
+    #? Log the arguments
     log.debug('arguments: ')
     for arg in vars(args):
         log.debug('  %-16s: %s', arg, getattr(args, arg))
 
-    # Output file
-    if args.output is None:
-        # Replace existing extension or append new extension
-        if args.decode:
-            args.output = os.path.splitext(args.input)[0] + '.genotype_matrix'
-        else:
-            args.output = os.path.splitext(args.input)[0] + '.gvc'
-        log.info('writing output to: {}'.format(args.output))
+    #? Output file
+    # if args.output is None:
+        # # Replace existing extension or append new extension
+        # if args.decode:
+        #     args.output = os.path.splitext(args.input)[0] + '.genotype_matrix'
+        # else:
+        #     args.output = os.path.splitext(args.input)[0] + '.gvc'
+        # log.info('writing output to: {}'.format(args.output))
 
     #? Run
-    if args.mode in ["decode", "compare", "stat", "cprofile"]:
-    # if args.mode in dec_modes:
-        decoder = gvc.decoder.Decoder(args.input, args.output)
+    # if args.mode in ["decode", "compare", "stat", "cprofile"]:
+    if args.mode in ["decode", "random-access"]:
 
         if args.mode == "decode":
+            decoder = gvc.decoder.Decoder(args.input, args.output)
             decoder.decode_all()
+            
+        elif args.mode == "random-access":
+            decoder = gvc.decoder.Decoder(args.input)
+            decoder.random_access(
+                args.pos,
+                args.end_pos,
+                args.samples
+            )
+            
+        else:
+            raise NotImplementedError(args.mode)
 
-        elif args.mode == "compare":
-            decoder.compare()
+        # elif args.mode == "compare":
+        #     decoder.compare()
 
-        elif args.mode == "stat":
-            decoder.stat()
+        # elif args.mode == "stat":
+        #     decoder.stat()
 
-        elif args.mode == "cprofile":
-            decoder.cprofile()
+        # elif args.mode == "cprofile":
+        #     decoder.cprofile()
 
     elif args.mode == "encode":
         encoder = gvc.encoder.Encoder(
@@ -202,3 +213,6 @@ def run(args, run_as_module: bool):
         )
         
         encoder.run()
+        
+    else:
+        raise NotImplementedError("Mode is not available:{}".format(args.mode))

@@ -11,30 +11,28 @@ from .reader import FORMAT_ID, raw_vcf_genotypes_reader, raw_vcf_to_gt_mat
 from .sort import sort
 from .codec import encode
 
-def worker_reader(lock_A, queue_A, input_fpath, block_size, buffer_size=1):
+def worker_reader(lock_A, queue_A, input_fpath, output_fpath, block_size, buffer_size=1):
 
     if input_fpath.endswith('.txt'):
         raise RuntimeError("Deprecated!")
-        iterator = gvc.reader.txt_genotypes_reader(input_fpath, block_size)
-        format_id = FORMAT_ID.TXT
-    elif input_fpath.endswith('.vcf'):
-        iterator = raw_vcf_genotypes_reader(input_fpath, block_size)
-    elif input_fpath.endswith('vcf.gz'):
-        iterator = raw_vcf_genotypes_reader(input_fpath, block_size)
+    elif input_fpath.endswith('.vcf') or input_fpath.endswith('vcf.gz'):
+        iterator = gvc.reader.vcf_genotypes_reader(input_fpath, output_fpath, block_size)
     else:
         raise ValueError('Invalid Format')
 
     for block_ID, raw_block in enumerate(iterator):
-        # allele_matrix, phasing_matrix, p, any_missing, not_available = raw_block
-
-        format_id = raw_block[0]
+        allele_matrix, phasing_matrix, p, any_missing, not_available = raw_block
         
-        if format_id == FORMAT_ID.TXT:
-            raise RuntimeError("Deprecated!")
-            allele_matrix = raw_block[0]
-            log.info('Adding block {} with size {}'.format(block_ID, allele_matrix.shape[0]))
-        elif format_id == FORMAT_ID.VCF:
-            log.info('Adding block {} with size {}'.format(block_ID, len(raw_block[1])))
+        log.info('Adding block {} with size {}'.format(block_ID, allele_matrix.shape[0]))
+
+        # format_id = raw_block[0]
+        
+        # if format_id == FORMAT_ID.TXT:
+        #     raise RuntimeError("Deprecated!")
+        #     allele_matrix = raw_block[0]
+        #     log.info('Adding block {} with size {}'.format(block_ID, allele_matrix.shape[0]))
+        # elif format_id == FORMAT_ID.VCF:
+        #     log.info('Adding block {} with size {}'.format(block_ID, len(raw_block[1])))
 
         wait = True
 
@@ -98,12 +96,14 @@ def worker_encoder(lock_A, queue_A, lock_B, queue_B, param_set_list):
 
             running = False
         else:
-            format_id = raw_block[0]
+            # format_id = raw_block[0]
             
-            if format_id == FORMAT_ID.VCF:
-                allele_matrix, phasing_matrix, p, any_missing, not_available = raw_vcf_to_gt_mat(raw_block[1:])
-            else:
-                raise NotImplementedError("Not yet implemented or deprecated!")
+            # if format_id == FORMAT_ID.VCF:
+            #     allele_matrix, phasing_matrix, p, any_missing, not_available = raw_vcf_to_gt_mat(raw_block[1:])
+            # else:
+            #     raise NotImplementedError("Not yet implemented or deprecated!")
+            
+            allele_matrix, phasing_matrix, p, any_missing, not_available = raw_block
 
             log.info('Encoding block {} with size {}'.format(block_ID, allele_matrix.shape[0]))
 
@@ -315,7 +315,7 @@ def run_multiprocessing(
         mp.Process(
             name="Reader",
             target=worker_reader, 
-            args=(lock_A, queue_A, input_fpath, block_size),
+            args=(lock_A, queue_A, input_fpath, output_fpath, block_size),
              kwargs={'buffer_size' : num_processes*2})
     )
     

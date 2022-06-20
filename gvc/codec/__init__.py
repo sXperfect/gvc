@@ -5,12 +5,14 @@ import numpy as np
 from ..data_structures.consts import CodecID
 from ..data_structures import RowColIds, ParameterSet, VectorAMax
 
+from . import jbigkit #? Import jbigkit
+
 #? If a new codec is added, please update data_structure.consts too
 MAT_CODECS = {
     CodecID.JBIG1 : {
         "name": "jbig",
-        "encoder": None,
-        "decoder": None,
+        "encoder": jbigkit.encode, #? Add encode function
+        "decoder": jbigkit.decode, #? Add decode function
     }
 }
 

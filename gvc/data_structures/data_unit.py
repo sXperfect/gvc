@@ -25,19 +25,13 @@ class DataUnitHeader():
     def __len__(self):
         return consts.DATA_UNIT_TYPE_LEN + consts.DATA_UNIT_SIZE_LEN + self.content_len
 
-    def from_bytes(self, ):
-        raise NotImplementedError()
-
-    # def header_to_bytes(
-    #     self, 
-    #     payload_len
-    # ):
-
-    #     header_bitio = bitstream.BitIO()
-    #     header_bitio.write(consts.DataUnitType.PARAMETER_SET, consts.DATA_UNIT_TYPE_LEN * 8)
-    #     header_bitio.write(
-    #         consts.DATA_UNIT_TYPE_LEN + consts.DATA_UNIT_SIZE_LEN + payload_len,
-    #         consts.DATA_UNIT_SIZE_LEN*8
-    #     )
-
-    #     return header_bitio.to_bytes()
+    # def from_bytes(self, ):
+    #     raise NotImplementedError()
+    
+    @classmethod
+    def from_bitstream(cls, type, bitreader):
+        
+        total_len = bitreader.read_bytes(consts.DATA_UNIT_SIZE_LEN, ret_int=True)
+        content_len = total_len - (consts.DATA_UNIT_TYPE_LEN + consts.DATA_UNIT_SIZE_LEN)
+        
+        return cls(type, content_len)

@@ -2,12 +2,15 @@ import time
 import logging as log
 
 import numpy as np
+from gvc.data_structures.data_unit import DataUnitHeader
 
 import gvc.utils
 import gvc.data_structures
 import gvc.bitstream
 import gvc.binarization
+from .data_structures import consts
 
+from .codec import jbig
 from . import cdebinarize
 
 def _decode_encoded_variants(
@@ -204,10 +207,11 @@ def _get_tensor_shape(enc_var, param_set):
     for i_bin_mat in range(param_set.num_variants_flags):
 
         if param_set.variants_coder_ids[i_bin_mat] == 0:
-            header_bytes = enc_var.variants_payloads[i_bin_mat].read(gvc.third_party.jbig1.BIE_HEADER_LEN)
-            bin_mat_nrows, bin_mat_ncols = gvc.third_party.jbig1.get_header(header_bytes)
+            header_bytes = enc_var.variants_payloads[i_bin_mat].read(jbig.BIE_HEADER_LEN)
+            bin_mat_nrows, bin_mat_ncols = jbig.get_shape(header_bytes)
 
         elif param_set.variants_coder_ids[i_bin_mat] == 1:
+            raise NotImplementedError()
             header_bytes = enc_var.variants_payloads[i_bin_mat].read(gvc.data_structures.GabacMatrix.NROW_LEN + gvc.data_structures.GabacMatrix.NCOL_LEN)
 
             bin_mat_nrows = gvc.utils.bytes_to_int(header_bytes[:4])
@@ -288,7 +292,7 @@ class DecoderContext(object):
 class Decoder(object):
     def __init__(self,
         input_fpath,
-        output_fpath,
+        output_fpath=None,
     ):
 
         self.input_fpath = input_fpath
@@ -304,21 +308,25 @@ class Decoder(object):
     def _decode_parameter_set(self):
         log.info('decoding parameter set')
 
-        param_set = gvc.data_structures.ParameterSet.from_bitstream(self._bitstream_reader)
+        header = DataUnitHeader.from_bitstream(consts.DataUnitType.PARAMETER_SET,
+                                               self._bitstream_reader)
+        param_set = gvc.data_structures.ParameterSet.from_bitstream(self._bitstream_reader,
+                                                                    header)
         self.decoder_context.parameter_sets[param_set.parameter_set_id] = param_set
 
     def _cache_access_unit(self):
         start_pos = self._f.tell()
 
-        data_unit_size = self._bitstream_reader.read_bits(gvc.data_structures.DATA_UNIT_SIZE_LEN * 8)  # data_unit_size
+        # data_unit_size = self._bitstream_reader.read_bits(consts.DATA_UNIT_SIZE_LEN * 8)  # data_unit_size
+        # data_unit_size = self._bitstream_reader.read_bytes(consts.DATA_UNIT_SIZE_LEN)
         acc_unit = gvc.data_structures.AccessUnit.from_bitstream(
             self._bitstream_reader, self.decoder_context.parameter_sets)
 
         end_pos = self._f.tell()
 
-        assert end_pos-start_pos+gvc.data_structures.DATA_UNIT_TYPE_LEN == data_unit_size
+        # assert end_pos-start_pos+consts.DATA_UNIT_TYPE_LEN == data_unit_size
 
-        param_set = self.decoder_context[acc_unit.access_unit_header.parameter_set_id]
+        param_set = self.decoder_context[acc_unit.header.parameter_set_id]
 
         nrows = 0
         for block in acc_unit.blocks:
@@ -333,13 +341,12 @@ class Decoder(object):
             if self.decoder_context.ncols is not None:
                 if tensor_shape[1] != self.decoder_context.ncols or tensor_shape[2] != param_set.p: 
                     log.error('Tensor shape not consistent')
-                    # raise gvc.errors.GvcError()
             else:
                 self.decoder_context.ncols = tensor_shape[1]
 
-        # Preallocate list with values None
-        # Created to handle case where access unit id stored is not in order
-        access_unit_id = acc_unit.access_unit_header.access_unit_id
+        #? Preallocate list with values None
+        #? Created to handle case where access unit id stored is not in order
+        access_unit_id = acc_unit.header.access_unit_id
         if len(self.decoder_context.nrows) <= access_unit_id:
             for _ in range(access_unit_id - len(self.decoder_context.nrows)):
                 self.decoder_context.nrows.append(None)
@@ -356,19 +363,19 @@ class Decoder(object):
         log.info('Caching data')
 
         while True:
-            data_unit_type = self._bitstream_reader.read_bits(gvc.data_structures.DATA_UNIT_TYPE_LEN * 8)
+            data_unit_type = self._bitstream_reader.read_bits(consts.DATA_UNIT_TYPE_LEN * 8)
 
             if not self._bitstream_reader.read:
                 break
 
-            if data_unit_type == gvc.data_structures.ParameterSet.DATA_UNIT_TYPE:
+            if data_unit_type == consts.DataUnitType.PARAMETER_SET:
                 self._decode_parameter_set()
 
-            elif data_unit_type == gvc.data_structures.AccessUnit.DATA_UNIT_TYPE:
+            elif data_unit_type == consts.DataUnitType.ACCESS_UNIT:
                 self._cache_access_unit()
                 
             else:
-                raise gvc.errors.GvcError('invalid data unit type: {}'.format(data_unit_type))
+                raise TypeError('invalid data unit type: {}'.format(data_unit_type))
 
             self._bitstream_reader._reset()
 
@@ -377,7 +384,7 @@ class Decoder(object):
                 self.decoder_context.access_units[i_access_unit]
             except KeyError:
                 log.error('Missing access_unit_id: {}'.format(i_access_unit))
-                raise gvc.errors.GvcError('Missing access_unit_id: {}'.format(i_access_unit))
+                raise ValueError('Missing access_unit_id: {}'.format(i_access_unit))
 
     @property
     def num_access_units(self):
@@ -412,44 +419,44 @@ class Decoder(object):
 
                 gvc.binarization.compare_tensor_to_txt(allele_tensor, phasing_tensor, out_f)
 
-    def stat(self):
-        try:
-            import pandas as pd
-        except:
-            raise RuntimeError("Please install pandas!")
+    # def stat(self):
+    #     try:
+    #         import pandas as pd
+    #     except:
+    #         raise RuntimeError("Please install pandas!")
         
-        df = pd.DataFrame(columns=[
-            "AccessUnitID", "BlockID", 
-            "NumAlleleBinMat", "AlleleBinMat", "AlleleRowIds", "AlleleColIds", 
-            "AMax", 
-            "PhaseBinMat", "PhaseRowIds", "PhaseColIds",
-        ])
+    #     df = pd.DataFrame(columns=[
+    #         "AccessUnitID", "BlockID", 
+    #         "NumAlleleBinMat", "AlleleBinMat", "AlleleRowIds", "AlleleColIds", 
+    #         "AMax", 
+    #         "PhaseBinMat", "PhaseRowIds", "PhaseColIds",
+    #     ])
 
-        for access_unit_id in range(self.num_access_units):
-            self.decoder_context.set_access_unit(access_unit_id)
+    #     for access_unit_id in range(self.num_access_units):
+    #         self.decoder_context.set_access_unit(access_unit_id)
 
-            for block_id, block in enumerate(self.decoder_context.curr_access_unit.blocks):
-                log.info('Stat block {}'.format(block_id))
+    #         for block_id, block in enumerate(self.decoder_context.curr_access_unit.blocks):
+    #             log.info('Stat block {}'.format(block_id))
 
-                stat = block.stat()
+    #             stat = block.stat()
 
-                stat["AccessUnitID"] = access_unit_id
-                stat["BlockID"] = block_id
+    #             stat["AccessUnitID"] = access_unit_id
+    #             stat["BlockID"] = block_id
                 
-                df = df.append(stat, ignore_index=True)
+    #             df = df.append(stat, ignore_index=True)
 
-        df.to_csv(
-            self.output_fpath, index=False
-        )
+    #     df.to_csv(
+    #         self.output_fpath, index=False
+    #     )
 
-    def cprofile(self):
+    # def cprofile(self):
 
-        for i_access_unit in range(self.num_access_units):
-            self.decoder_context.set_access_unit(i_access_unit)
+    #     for i_access_unit in range(self.num_access_units):
+    #         self.decoder_context.set_access_unit(i_access_unit)
 
-            for i, block in enumerate(self.decoder_context.curr_access_unit.blocks):
-                log.info('Decoding block {}'.format(i))
-                allele_tensor, phasing_tensor = _decode_block_payload(self.decoder_context.curr_parameter_set, block)
+    #         for i, block in enumerate(self.decoder_context.curr_access_unit.blocks):
+    #             log.info('Decoding block {}'.format(i))
+    #             allele_tensor, phasing_tensor = _decode_block_payload(self.decoder_context.curr_parameter_set, block)
 
     def random_access(self, start_pos, end_pos, sample_id=None):
 
@@ -466,14 +473,14 @@ class Decoder(object):
 
                     _selective_decode_encoded_variants(param_set, block.block_payload, row_slice, sample_id)
 
-                # No variant found given POSs
+                #? No variant found given POSs
                 else:
                     # return None
                     pass
 
                 pass
 
-        # No block found given POSs
+        #? No block found given POSs
         else:
             return None
 

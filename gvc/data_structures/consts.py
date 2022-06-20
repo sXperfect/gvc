@@ -13,16 +13,15 @@ class ConcatAxis(IntEnum):
     NONE = 2
     TOTAL = 3
 
-class BinarizationFlag(IntEnum):
+class BinarizationMode(IntEnum):
     BIT_PLANE = 0
     ROW_SPLIT = 1
-    RC_BIN_SPLIT = 2
-    RC_BIN_SPLIT2 = 3
+    ROW_BIN_SPLIT = 2
+    ROW_BIN_SPLIT2 = 3
 
 class CodecID(IntEnum):
     JBIG1 = 0
     GABAC = 1
-    PPMD = 2 #? Temporary
 
 BYTEORDER = 'big'
 DATA_UNIT_TYPE_LEN = 1

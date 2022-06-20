@@ -3,6 +3,7 @@ import numpy as np
 import logging as log
 
 from .data_structures import AccessUnit, ParameterSet
+from .data_structures.consts import BinarizationMode
 from .binarization import binarization_str_to_flag
 from .codec import CODEC_STR2ID
 
@@ -49,7 +50,7 @@ def create_parameter_set(
             num_variants_flags = num_bin_mat
 
     # Binarization by row splitting
-    elif binarization_flag in (1, 2, 3):
+    elif binarization_flag in (BinarizationMode.ROW_SPLIT, BinarizationMode.ROW_BIN_SPLIT, BinarizationMode.ROW_BIN_SPLIT2):
         num_bin_mat = 1
         num_variants_flags = num_bin_mat
 
@@ -57,7 +58,7 @@ def create_parameter_set(
         log.error('Invalid binarization_flag: {}'.format(binarization_flag))
         raise ValueError('Invalid binarization_flag: {}'.format(binarization_flag))
 
-    # Handle case where phasing matrix can be represented by a single value
+    #? Handle the case where phasing matrix can be represented by a single value
     if p == 1 or np.all(~phasing_matrix) or np.all(phasing_matrix):
         if phasing_matrix is None:
             phasing_value = 0

@@ -46,21 +46,23 @@ def _run_no_threads(
         if input_fpath.endswith('.txt'):
             raise RuntimeError("Deprecated!")
         elif input_fpath.endswith('.vcf'):
-            iterator = gvc.reader.raw_vcf_genotypes_reader(input_fpath, block_size)
+            iterator = gvc.reader.vcf_genotypes_reader(input_fpath, output_fpath, block_size)
         elif input_fpath.endswith('vcf.gz'):
-            iterator = gvc.reader.raw_vcf_genotypes_reader(input_fpath, block_size)
+            iterator = gvc.reader.vcf_genotypes_reader(input_fpath, output_fpath, block_size)
         else:
             raise ValueError('Invalid Format')
 
-        for raw_block in iterator:
-            # allele_matrix, phasing_matrix, p, any_missing, not_available = raw_block
-            # block, num_samples, p = raw_block
-            format_id = raw_block[0]
+        for block_ID, raw_block in enumerate(iterator):
+            allele_matrix, phasing_matrix, p, any_missing, not_available = raw_block
             
-            if format_id == FORMAT_ID.VCF:
-                allele_matrix, phasing_matrix, p, any_missing, not_available = reader.raw_vcf_to_gt_mat(raw_block[1:])
-            else:
-                raise NotImplementedError("Not yet implemented or deprecated!")
+            log.info('Adding block {} with size {}'.format(block_ID, allele_matrix.shape[0]))
+            # block, num_samples, p = raw_block
+            # format_id = raw_block[0]
+            
+            # if format_id == FORMAT_ID.VCF:
+            #     allele_matrix, phasing_matrix, p, any_missing, not_available = reader.raw_vcf_to_gt_mat(raw_block[1:])
+            # else:
+            #     raise NotImplementedError("Not yet implemented or deprecated!")
 
             # Execute part 4.2 - binarization of allele matrix
             log.info('Execute part 4.2 - Binarization')

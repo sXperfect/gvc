@@ -5,18 +5,6 @@ from . import consts
 from .data_unit import DataUnitHeader
 from .. import bitstream
 
-# class ParameterSetHeader():
-#     @staticmethod
-#     def to_bytes(payload_len):
-#         header_bitio = bitstream.BitIO()
-#         header_bitio.write(consts.DataUnitType.PARAMETER_SET, consts.DATA_UNIT_TYPE_LEN * 8)
-#         header_bitio.write(
-#             consts.DATA_UNIT_TYPE_LEN + consts.DATA_UNIT_SIZE_LEN + payload_len,
-#             consts.DATA_UNIT_SIZE_LEN*8
-#         )
-
-#         return header_bitio.to_bytes()
-
 class ParameterSet():
     def __init__(
         self,
@@ -226,8 +214,7 @@ class ParameterSet():
         payload_b = self.to_bitio().to_bytes()
 
         if header:
-            # header_b = ParameterSetHeader.to_bytes(len(payload_b))
-            header = DataUnitHeader(consts.DataUnitType.ACCESS_UNIT, len(payload_b))
+            header = DataUnitHeader(consts.DataUnitType.PARAMETER_SET, len(payload_b))
 
             return bytes(header.to_barray()) + payload_b
         else:
@@ -257,7 +244,7 @@ class ParameterSet():
         # Belongs to header
         # data_len = bitstream_reader.read_bytes(consts.DATA_UNIT_SIZE_LEN)
 
-        parameter_set_id = bitstream_reader.read_bytes(consts.PARAMETER_SET_ID_LEN)
+        parameter_set_id = bitstream_reader.read_bytes(consts.PARAMETER_SET_ID_LEN, ret_int=True)
 
         any_missing_flag = bitstream_reader.read_bits(consts.ANY_MISSING_FLAG_BITLEN)
         not_available_flag = bitstream_reader.read_bits(consts.NOT_AVAILABLE_FLAG_BITLEN)
@@ -316,7 +303,7 @@ class ParameterSet():
 
         #? DATA_UNIT read outside this function, thus offset DATA_UNIT_TYPE_LEN is required
         # assert (bitstream_reader.tell() - start_pos + consts.DATA_UNIT_TYPE_LEN) == data_len
-        assert (bitstream_reader.tell() - start_pos) == header.len
+        assert (bitstream_reader.tell() - start_pos) == header.content_len
 
         return cls(
             parameter_set_id,
