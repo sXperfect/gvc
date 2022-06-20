@@ -137,7 +137,7 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
         subpos_array
     )
     
-    min_max_pos = np.array([pos_arr.min(), pos_arr.max()], dtype=np.uint64)
+    min_max_pos = np.array([subpos_array.min(), subpos_array.max()], dtype=np.uint64)
     min_max_pos_list.append(min_max_pos)
     
     np.save(

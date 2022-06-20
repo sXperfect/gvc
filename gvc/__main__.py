@@ -20,7 +20,7 @@ subparsers = parser.add_subparsers(dest='mode')
 
 #? Encode
 encode_parser = subparsers.add_parser('encode')
-# encode_parser.add_argument('-l', '--log_level', help='log level', choices=LOG_LEVELS.keys(), default='info')
+encode_parser.add_argument('-l', '--log_level', help='log level', choices=LOG_LEVELS.keys(), default='info')
 encode_parser.add_argument('-c', '--compare', help='compare', action='store_true')
 encode_parser.add_argument('-j', '--num-threads', help='?', type=int, default=0)
 encode_parser.add_argument('-b', '--block_size', help=block_size_help, type=int, default=1024)

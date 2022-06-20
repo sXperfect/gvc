@@ -11,10 +11,14 @@ class Index():
     def __init__(self, index_dpath, decoder_context):
         self.index_dpath = index_dpath        
 
-        with open(join(self.index_dpath, 'main.bin'), 'rb') as f:
-            payload = f.read()
+        # with open(join(self.index_dpath, 'main.bin'), 'rb') as f:
+        #     payload = f.read()
 
-        self.root_idx = np.frombuffer(payload, dtype=int).reshape(-1, 2)
+        # self.root_idx = np.frombuffer(payload, dtype=int).reshape(-1, 2)
+        # self.num_blocks = self.root_idx.shape[0]
+        
+        main_idx_fpath = join(self.index_dpath, 'main.npy')
+        self.root_idx = np.load(main_idx_fpath)
         self.num_blocks = self.root_idx.shape[0]
 
         block_ptrs = []
@@ -22,7 +26,8 @@ class Index():
         for k in range(len(decoder_context.access_units)):
             blocks = decoder_context.access_units[k].blocks
             num_blocks = len(blocks)
-            param_set_id = decoder_context.access_units[k].get_param_set_id()
+            # param_set_id = decoder_context.access_units[k].get_param_set_id()
+            param_set_id = decoder_context.access_units[k].header.parameter_set_id
 
             block_ptrs.extend(
                 blocks
@@ -46,7 +51,7 @@ class Index():
 
     @classmethod
     def from_gvc_fpath(cls, input_fpath, decoder_context):
-        input_dpath = input_fpath + '.index'
+        input_dpath = input_fpath + '.metadata'
         try:
             return cls(input_dpath, decoder_context)
         except FileNotFoundError:
@@ -68,12 +73,14 @@ class Index():
         curr_block_idx = self.block_idx[block_id]
 
         if curr_block_idx is None:
-            blk_idx_fpath = join(self.index_dpath, 'blk{}.bin'.format(block_id))
+            # blk_idx_fpath = join(self.index_dpath, '.bin'.format(block_id))
 
-            with open(blk_idx_fpath, 'rb') as f:
-                payload = f.read()
+            # with open(blk_idx_fpath, 'rb') as f:
+            #     payload = f.read()
 
-            curr_block_idx = np.frombuffer(payload, dtype=int)
+            # curr_block_idx = np.frombuffer(payload, dtype=int)
+            blk_idx_fpath = join(self.index_dpath, f"{block_id}.npy")
+            curr_block_idx = np.load(blk_idx_fpath)
 
             self.block_idx[block_id] = curr_block_idx
 

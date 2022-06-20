@@ -2,26 +2,28 @@ import time
 import logging as log
 
 import numpy as np
-from gvc.data_structures.data_unit import DataUnitHeader
+# from ds.data_unit import DataUnitHeader
 
 import gvc.utils
 import gvc.data_structures
 import gvc.bitstream
 import gvc.binarization
 from .data_structures import consts
+from . import data_structures as ds
 
+from . import codec
 from .codec import jbig
 from . import cdebinarize
 
 def _decode_encoded_variants(
-    param_set:gvc.data_structures.ParameterSet,
+    param_set:ds.ParameterSet,
     encoded_variants, 
 ):
 
     bin_matrices = []
     for i_bin_mat in range(param_set.num_variants_flags):
 
-        bin_mat = gvc.entropy.decode_bin_mat(
+        bin_mat = codec.decode(
             encoded_variants.variants_payloads[i_bin_mat],
             encoded_variants.variants_row_ids_payloads[i_bin_mat],
             encoded_variants.variants_col_ids_payloads[i_bin_mat],
@@ -34,12 +36,14 @@ def _decode_encoded_variants(
 
         bin_matrices.append(bin_mat)
 
-    if param_set.binarization_flag == 0:
+    if param_set.binarization_flag == consts.BinarizationMode.BIT_PLANE:
         additional_info = param_set.num_bin_mat
-    elif param_set.binarization_flag == 1 or 2:
-        additional_info = gvc.data_structures.VectorAMax.from_bytes(encoded_variants.variants_amax_payload.read()).vector
+    elif param_set.binarization_flag in [consts.BinarizationMode.ROW_SPLIT, consts.BinarizationMode.ROW_BIN_SPLIT]:
+        additional_info = ds.VectorAMax.from_bytes(encoded_variants.variants_amax_payload.read()).vector
+    elif param_set.binarization_flag == consts.BinarizationMode.ROW_BIN_SPLIT2:
+        additional_info = None
     else:
-        raise gvc.errors.GvcError
+        raise ValueError()
 
     allele_matrix = gvc.binarization.debinarize_bin_matrices(
         bin_matrices, additional_info, param_set.concat_axis, param_set.binarization_flag
@@ -49,7 +53,7 @@ def _decode_encoded_variants(
         allele_matrix, param_set.any_missing_flag, param_set.not_available_flag)
 
     if param_set.encode_phase_data:
-        phasing_matrix = gvc.entropy.decode_bin_mat(
+        phasing_matrix = codec.decode(
             encoded_variants.phase_payload,
             encoded_variants.phase_row_ids_payload,
             encoded_variants.phase_col_ids_payload,
@@ -77,8 +81,8 @@ def _selective_decode_encoded_variants(param_set, encoded_variants, row_mask, se
     if param_set.binarization_flag == gvc.binarization.BIT_PLANE_FLAG:
         raise NotImplementedError()
         additional_info = param_set.num_bin_mat
-    elif param_set.binarization_flag == gvc.binarization.ROW_SPLIT_FLAG or param_set.binarization_flag == gvc.binarization.RC_BIN_SPLIT_FLAG:
-        bin_mat, row_ids, col_ids = gvc.entropy.decode_bin_mat(
+    elif param_set.binarization_flag in [consts.BinarizationMode.ROW_SPLIT, consts.BinarizationMode.ROW_BIN_SPLIT]:
+        bin_mat, row_ids, col_ids = codec.decode(
             encoded_variants.variants_payloads[0],
             encoded_variants.variants_row_ids_payloads[0],
             encoded_variants.variants_col_ids_payloads[0],
@@ -102,7 +106,7 @@ def _selective_decode_encoded_variants(param_set, encoded_variants, row_mask, se
         else:
             pass
 
-        amax_vec = gvc.data_structures.VectorAMax.from_bytes(encoded_variants.variants_amax_payload.read()).vector
+        amax_vec = ds.VectorAMax.from_bytes(encoded_variants.variants_amax_payload.read()).vector
 
         selected_row_ids = row_ids[row_mask]
 
@@ -114,16 +118,16 @@ def _selective_decode_encoded_variants(param_set, encoded_variants, row_mask, se
             np.sum(amax_vec[:max_row_ids+1]),
         )
 
-        if param_set.binarization_flag == gvc.binarization.RC_BIN_SPLIT_FLAG:
+        if param_set.binarization_flag ==  consts.BinarizationMode.ROW_BIN_SPLIT:
             allele_matrix = gvc.binarization._debinarize_by_rc_bin_split(bin_mat[bin_mat_slice, :], amax_vec[min_row_ids:max_row_ids+1])
             selected_allele_matrix = allele_matrix[selected_row_ids-min_row_ids, :]
         else:
             raise NotImplementedError()
     else:
-        raise gvc.errors.GvcError
+        raise ValueError("Invalid binarization flag")
 
     if param_set.encode_phase_data:
-        phasing_matrix = gvc.entropy.decode_bin_mat(
+        phasing_matrix = codec.decode(
             encoded_variants.phase_payload,
             encoded_variants.phase_row_ids_payload,
             encoded_variants.phase_col_ids_payload,
@@ -145,10 +149,10 @@ def _selective_decode_encoded_variants(param_set, encoded_variants, row_mask, se
 
         return gt_mat
 
-def _decode_block_payload(param_set, block: gvc.data_structures.Block):
+def _decode_block_payload(param_set, block: ds.Block):
     log.info('decoding block payload')
 
-    if block.block_header.content_id == gvc.data_structures.TSPEncodedVariants.CONTENT_ID:
+    if block.block_header.content_id == ds.TSPEncodedVariants.CONTENT_ID:
         log.info('Decoding EncodedVariants')
 
         return _decode_encoded_variants(param_set, block.block_payload)
@@ -212,7 +216,7 @@ def _get_tensor_shape(enc_var, param_set):
 
         elif param_set.variants_coder_ids[i_bin_mat] == 1:
             raise NotImplementedError()
-            header_bytes = enc_var.variants_payloads[i_bin_mat].read(gvc.data_structures.GabacMatrix.NROW_LEN + gvc.data_structures.GabacMatrix.NCOL_LEN)
+            header_bytes = enc_var.variants_payloads[i_bin_mat].read(ds.GabacMatrix.NROW_LEN + ds.GabacMatrix.NCOL_LEN)
 
             bin_mat_nrows = gvc.utils.bytes_to_int(header_bytes[:4])
             bin_mat_ncols = gvc.utils.bytes_to_int(header_bytes[4:])
@@ -238,7 +242,7 @@ def _get_tensor_shape(enc_var, param_set):
             ncols = ncols // param_set.num_bin_mat
 
     elif param_set.binarization_flag == 1:
-        vector_amax = gvc.data_structures.VectorAMax.from_bytes(enc_var.variants_amax_payload.read()).vector
+        vector_amax = ds.VectorAMax.from_bytes(enc_var.variants_amax_payload.read()).vector
         nrows += int(np.sum(vector_amax[vector_amax != 1]))
 
     tensor_nrows = nrows
@@ -279,7 +283,7 @@ class DecoderContext(object):
 
     def __getitem__(self,
         parameter_set_id: int
-    ) -> gvc.data_structures.ParameterSet:
+    ) -> ds.ParameterSet:
 
         return self.parameter_sets[parameter_set_id]
 
@@ -303,14 +307,14 @@ class Decoder(object):
         self.decoder_context = DecoderContext()
         self._cache_data()
 
-        self.index = gvc.data_structures.Index.from_gvc_fpath(input_fpath, self.decoder_context)
+        self.index = ds.Index.from_gvc_fpath(input_fpath, self.decoder_context)
 
     def _decode_parameter_set(self):
         log.info('decoding parameter set')
 
-        header = DataUnitHeader.from_bitstream(consts.DataUnitType.PARAMETER_SET,
+        header = ds.DataUnitHeader.from_bitstream(consts.DataUnitType.PARAMETER_SET,
                                                self._bitstream_reader)
-        param_set = gvc.data_structures.ParameterSet.from_bitstream(self._bitstream_reader,
+        param_set = ds.ParameterSet.from_bitstream(self._bitstream_reader,
                                                                     header)
         self.decoder_context.parameter_sets[param_set.parameter_set_id] = param_set
 
@@ -319,7 +323,7 @@ class Decoder(object):
 
         # data_unit_size = self._bitstream_reader.read_bits(consts.DATA_UNIT_SIZE_LEN * 8)  # data_unit_size
         # data_unit_size = self._bitstream_reader.read_bytes(consts.DATA_UNIT_SIZE_LEN)
-        acc_unit = gvc.data_structures.AccessUnit.from_bitstream(
+        acc_unit = ds.AccessUnit.from_bitstream(
             self._bitstream_reader, self.decoder_context.parameter_sets)
 
         end_pos = self._f.tell()
@@ -406,6 +410,35 @@ class Decoder(object):
                 self.decoder_context.set_access_unit(i_access_unit)
 
                 _decode_and_write_access_unit(out_f, self.decoder_context)
+                
+    def random_access(self, start_pos, end_pos, sample_id=None):
+        
+        if end_pos == -1:
+            end_pos = start_pos
+
+        block_param_set_id_pairs = self.index.get_block_param_set_id_pairs(start_pos, end_pos)
+
+        if block_param_set_id_pairs.shape[0]:
+
+            for i_block in range(block_param_set_id_pairs.shape[0]):
+                block_id, block, param_set_id = block_param_set_id_pairs[i_block, :]
+
+                row_slice = self.index.get_row_mask(block_id, start_pos, end_pos)
+                if row_slice.start < row_slice.stop:
+                    param_set = self.decoder_context.parameter_sets[param_set_id]
+
+                    _selective_decode_encoded_variants(param_set, block.block_payload, row_slice, sample_id)
+
+                #? No variant found given POSs
+                else:
+                    # return None
+                    pass
+
+                pass
+
+        #? No block found given POSs
+        else:
+            return None
 
     def compare(self):
 
@@ -458,31 +491,7 @@ class Decoder(object):
     #             log.info('Decoding block {}'.format(i))
     #             allele_tensor, phasing_tensor = _decode_block_payload(self.decoder_context.curr_parameter_set, block)
 
-    def random_access(self, start_pos, end_pos, sample_id=None):
 
-        block_param_set_id_pairs = self.index.get_block_param_set_id_pairs(start_pos, end_pos)
-
-        if block_param_set_id_pairs.shape[0]:
-
-            for i_block in range(block_param_set_id_pairs.shape[0]):
-                block_id, block, param_set_id = block_param_set_id_pairs[i_block, :]
-
-                row_slice = self.index.get_row_mask(block_id, start_pos, end_pos)
-                if row_slice.start < row_slice.stop:
-                    param_set = self.decoder_context.parameter_sets[param_set_id]
-
-                    _selective_decode_encoded_variants(param_set, block.block_payload, row_slice, sample_id)
-
-                #? No variant found given POSs
-                else:
-                    # return None
-                    pass
-
-                pass
-
-        #? No block found given POSs
-        else:
-            return None
 
 
 

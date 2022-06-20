@@ -20,8 +20,8 @@ class VectorAMax(object):
     ):
         istream = BitstreamReader(io.BytesIO(data))
 
-        num_entries = istream.read_bytes(consts.AMAX_NUM_ENTRIES_LEN)
-        bits_per_entry = istream.read_bytes(consts.AMAX_BITS_PER_ENTRY_LEN)
+        num_entries = istream.read_bytes(consts.AMAX_NUM_ENTRIES_LEN, ret_int=True)
+        bits_per_entry = istream.read_bytes(consts.AMAX_BITS_PER_ENTRY_LEN, ret_int=True)
 
         vector = np.ones((num_entries), dtype=int)
         for i in range(num_entries):

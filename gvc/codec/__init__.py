@@ -2,9 +2,11 @@ import logging as log
 import typing as t
 import numpy as np
 
+# from ..bitstream import RandomAccessHandler
 from ..data_structures.consts import CodecID
 from ..data_structures import RowColIds, ParameterSet, VectorAMax
 
+from . import jbig
 from . import jbigkit #? Import jbigkit
 
 #? If a new codec is added, please update data_structure.consts too
@@ -175,3 +177,74 @@ def encode(
         row_ids_phase_mat_payload,
         col_idx_phase_mat_payload,
     ]
+    
+def decode(
+    bin_mat_payload:bytes, 
+    row_ids_payload:bytes, 
+    col_ids_payload:bytes, 
+    coder_id:int,
+    unsort=True
+):
+    """
+
+    Parameters
+    ----------
+    bin_mat_payload : RandomAccessHandler or bytes
+    row_ids_payload : RandomAccessHandler or bytes, 
+    col_ids_payload : RandomAccessHandler or bytes, 
+    coder_id:int
+    Returns
+    -------
+
+    """
+    try:
+        bin_mat_payload = bin_mat_payload.read()
+    except AttributeError:
+        pass
+    # if isinstance(bin_mat_payload, RandomAccessHandler):
+    #     bin_mat = _decode_matrix(bin_mat_payload.read(), coder_id)
+    # else:
+    #     bin_mat = _decode_matrix(bin_mat_payload, coder_id)
+    decoder_f = MAT_CODECS[coder_id]['decoder']
+    bin_mat = decoder_f(bin_mat_payload)
+    nrows, ncols = bin_mat.shape
+
+    if row_ids_payload is not None:
+        # if isinstance(row_ids_payload, RandomAccessHandler):
+        #     row_ids = decode_permutation(row_ids_payload.read(), nrows, 'RowColIds')
+        # else:
+        #     row_ids = decode_permutation(row_ids_payload, nrows, 'RowColIds')
+        try:
+            row_ids_payload = row_ids_payload.read()
+        except AttributeError:
+            pass
+        row_ids = decode_permutation(row_ids_payload, nrows)
+
+        log.info('Unsort rows')
+
+        if unsort:
+            bin_mat = bin_mat[row_ids, :]
+    else:
+        row_ids = None
+
+    if col_ids_payload is not None:
+        try:
+            col_ids_payload = col_ids_payload.read()
+        except AttributeError:
+            pass
+        # if isinstance(col_ids_payload, RandomAccessHandler):
+        #     col_ids = decode_permutation(col_ids_payload.read(), ncols, 'RowColIds')
+        # else:
+        col_ids = decode_permutation(col_ids_payload, ncols)
+
+        log.info('Unsort columns')
+
+        if unsort:
+            bin_mat = bin_mat[:, col_ids]
+    else:
+        col_ids = None
+
+    if unsort:
+        return bin_mat
+    else:
+        return bin_mat, row_ids, col_ids

@@ -7,6 +7,7 @@ import itertools as it
 
 import gvc.common
 
+from .data_structures import consts
 from . import cdebinarize
 
 _phasing_dict = {

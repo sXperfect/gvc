@@ -179,7 +179,7 @@ def run(args, run_as_module: bool):
             decoder = gvc.decoder.Decoder(args.input)
             decoder.random_access(
                 args.pos,
-                args.end_pos,
+                args.end,
                 args.samples
             )
             

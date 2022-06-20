@@ -164,7 +164,7 @@ class RandomAccessHandler(object):
         self.f.seek(self.start_pos)
 
         if nbytes is None:
-            return self.f.read(self.length)
+            return self.f.read_bytes(self.length)
 
         elif nbytes <= self.length:
             return self.f.read_bytes(nbytes)
