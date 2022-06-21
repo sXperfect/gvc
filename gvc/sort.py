@@ -66,7 +66,7 @@ def _sort_matrix(
 
     sorted_bin_mat = bin_mat.copy()
 
-    log.info("Matrix shape: {}".format(bin_mat.shape))
+    log.debug("Matrix shape: {}".format(bin_mat.shape))
     
     if sort_row:
         log.info('Sort rows')
@@ -74,16 +74,16 @@ def _sort_matrix(
         if solver.req_dist_mat:
             with catchtime() as t:
                 cost_mat = comp_cost_mat(bin_mat, dist_f_name)
-            log.info("Cost matrix time : {:.2f}s".format(t.time))
+            log.debug("Cost matrix time : {:.2f}s".format(t.time))
             
             with catchtime() as t:
                 row_ids = solver.sort_rows(cost_mat)
-            log.info("Sort time: {:.2f}s".format(t.time))
+            log.debug("Sort time: {:.2f}s".format(t.time))
             
         else:
             with catchtime() as t:
                 row_ids = solver.sort_rows(bin_mat)
-            log.info("Total time: {:.2f}s".format(t.time))
+            log.debug("Total time: {:.2f}s".format(t.time))
             
     else:
         row_ids = None
@@ -94,16 +94,16 @@ def _sort_matrix(
         if solver.req_dist_mat:
             with catchtime() as t:
                 cost_mat = comp_cost_mat(bin_mat.T, dist_f_name)
-            log.info("Cost matrix time : {:.2f}s".format(t.time))
+            log.debug("Cost matrix time : {:.2f}s".format(t.time))
             
             with catchtime() as t:
                 col_ids = solver.sort_cols(cost_mat)
-            log.info("Sort time: {:.2f}s".format(t.time))
+            log.debug("Sort time: {:.2f}s".format(t.time))
             
         else:
             with catchtime() as t:
                 col_ids = solver.sort_cols(bin_mat)
-            log.info("Total time: {:.2f}s".format(t.time))
+            log.debug("Total time: {:.2f}s".format(t.time))
 
         sorted_bin_mat = sorted_bin_mat[:, col_ids]
     else:
@@ -152,7 +152,7 @@ def sort(
     log.info('Sort variant matrices')
     for i in range(param_set.num_variants_flags):
 
-        log.info('Sort variant matrix #{}'.format(i))
+        log.debug('Sort variant matrix #{}'.format(i))
 
         sorted_matrix, row_index, col_index = _sort_matrix(
             bin_allele_matrices[i],
@@ -181,7 +181,7 @@ def sort(
         )
 
     else:
-        log.info('Phase matrix is not sorted')
+        log.debug('Phase matrix is not sorted')
         sorted_phase_matrix = None
         row_idx_phase_matrix = None
         col_idx_phase_matrix = None

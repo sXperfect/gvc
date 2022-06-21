@@ -1,4 +1,5 @@
 from os.path import join
+from random import sample
 import numpy as np
 
 class Index():
@@ -19,7 +20,9 @@ class Index():
         
         main_idx_fpath = join(self.index_dpath, 'main.npy')
         self.root_idx = np.load(main_idx_fpath)
-        self.num_blocks = self.root_idx.shape[0]
+        
+        samples_fpath = join(self.index_dpath, 'samples.npy')
+        self.samples = np.load(samples_fpath)
 
         block_ptrs = []
         param_set_id_ptr = []
@@ -48,6 +51,14 @@ class Index():
 
         # Allocate memory for block_idx
         self.block_idx = [None] * self.num_blocks
+        
+    @property
+    def num_blocks(self):
+        return self.root_idx.shape[0]
+        
+    @property
+    def num_samples(self):
+        return len(self.samples)
 
     @classmethod
     def from_gvc_fpath(cls, input_fpath, decoder_context):
@@ -57,7 +68,7 @@ class Index():
         except FileNotFoundError:
             return None
 
-    def get_block_param_set_id_pairs(self, start_pos, end_pos):
+    def query_blk(self, start_pos, end_pos):
         # NOTE: Slower version
         # block_mask = (self.root_idx[:, 0] <= start_pos) & (self.root_idx[:, 1] >= end_pos)
         # return self.root_lookup[block_mask]
@@ -93,3 +104,20 @@ class Index():
         end_row = np.searchsorted(curr_block_idx, end_pos, side='right')
 
         return slice(start_row, end_row, None)
+    
+    def query_columns(self, sample_ids):
+        
+        if sample_ids is None:
+            # return slice(0, self.num_samples, None)
+            return None
+        
+        else:            
+            try:
+                sample_ids = np.array(sample_ids.strip().split(","))
+            except:
+                pass
+            
+            search_f = np.vectorize(lambda x: np.argmax(x == self.samples))
+            col_ids = search_f(sample_ids).astype(np.uint32)
+            
+            return col_ids

@@ -1,7 +1,4 @@
 #distutils: language = c++
-
-STUFF = "Hi"
-
 import numpy as np
 cimport numpy as np
 cimport cython
@@ -81,8 +78,8 @@ def reconstruct_genotype_matrix_using_phase_value(np.ndarray[np.uint8_t, ndim=2]
 
     return out_gt_mat
 
-@cython.boundscheck(False) # turn off bounds-checking for entire function
-@cython.wraparound(False)  # turn off negative index wrapping for entire function
+@cython.boundscheck(False) #? turn off bounds-checking for entire function
+@cython.wraparound(False)  #? turn off negative index wrapping for entire function
 @cython.overflowcheck.fold(False)
 cdef void creconstruct_genotype_matrix_using_phase_value(
     char** gt_mat, 
@@ -112,8 +109,8 @@ cdef void creconstruct_genotype_matrix_using_phase_value(
 
     char_per_genotype = 1
 
-    # length: number of genotypes{., 0, 1, ...} + number of phasing{\, |}  + number of separator {\t, \n}
-    # Multiplied by maximum genotype value (e.g 10 requires 2 bytes)
+    #? length: number of genotypes{., 0, 1, ...} + number of phasing{\, |}  + number of separator {\t, \n}
+    #? Multiplied by maximum genotype value (e.g 10 requires 2 bytes)
     gt_mat_len = (n_cols*char_per_genotype + (p-1)*n_samples + n_samples) * n_variants
 
     if phase_val == 0:
@@ -121,18 +118,17 @@ cdef void creconstruct_genotype_matrix_using_phase_value(
 
     gt_mat[0] = <char *> malloc((gt_mat_len + 1) * sizeof(char))
         
-    # Needed only if "PyBytes_FromStringAndSize" is not used in the next step
-    # This is used to avoid string remnant from other process
-    # memset(gt_mat[0], b'\0', (gt_mat_len + 1) * sizeof(char))
+    #? Needed only if "PyBytes_FromStringAndSize" is not used in the next step
+    #? This is used to avoid string remnant from other process
+    #? memset(gt_mat[0], b'\0', (gt_mat_len + 1) * sizeof(char))
     memset(gt_mat[0], b'0', (gt_mat_len + 1) * sizeof(char))
 
     for i_variant in range(n_variants):
-
         for i_sample in range(n_samples):
 
             curr_gt_val = allele_mat[i_variant, i_sample*p]
             
-            # Handle case where GT for current sample is available
+            #? Handle case where GT for current sample is available
             if curr_gt_val == -2:
                 continue
 
@@ -150,7 +146,7 @@ cdef void creconstruct_genotype_matrix_using_phase_value(
                     gt_mat[0][n] = gt_val_to_gt_char(curr_gt_val)
                 n += 2
             
-            # Add separator at the end of processing one sample
+            #? Add separator at the end of processing one sample
             if i_sample < n_samples-1:
                 gt_mat[0][n] = b'\t'
             else:

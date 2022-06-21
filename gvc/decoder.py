@@ -14,13 +14,14 @@ from . import data_structures as ds
 from . import codec
 from .codec import jbig
 from . import cdebinarize
+from . import cquery
 
 def _decode_encoded_variants(
     param_set:ds.ParameterSet,
     encoded_variants, 
 ):
 
-    bin_matrices = []
+    bin_matrices = np.empty(param_set.num_variants_flags, dtype=object)
     for i_bin_mat in range(param_set.num_variants_flags):
 
         bin_mat = codec.decode(
@@ -34,13 +35,13 @@ def _decode_encoded_variants(
             log.info('Re-transpose binary matrix')
             bin_mat = bin_mat.T
 
-        bin_matrices.append(bin_mat)
+        bin_matrices[i_bin_mat] = bin_mat
 
-    if param_set.binarization_flag == consts.BinarizationMode.BIT_PLANE:
+    if param_set.binarization_flag == consts.BinarizationID.BIT_PLANE:
         additional_info = param_set.num_bin_mat
-    elif param_set.binarization_flag in [consts.BinarizationMode.ROW_SPLIT, consts.BinarizationMode.ROW_BIN_SPLIT]:
+    elif param_set.binarization_flag in [consts.BinarizationID.ROW_SPLIT, consts.BinarizationID.ROW_BIN_SPLIT]:
         additional_info = ds.VectorAMax.from_bytes(encoded_variants.variants_amax_payload.read()).vector
-    elif param_set.binarization_flag == consts.BinarizationMode.ROW_BIN_SPLIT2:
+    elif param_set.binarization_flag == consts.BinarizationID.ROW_BIN_SPLIT2:
         additional_info = None
     else:
         raise ValueError()
@@ -66,8 +67,8 @@ def _decode_encoded_variants(
     else:
         phasing_matrix = param_set.phase_value
 
-    # return gvc.binarization.reconstruct_genotype_matrix(allele_matrix, phasing_matrix, param_set.p)
-    return allele_matrix, phasing_matrix
+    return gvc.binarization.reconstruct_genotype_matrix(allele_matrix, phasing_matrix, param_set.p)
+    # return allele_matrix, phasing_matrix
 
 def _compute_amax(amax_vec):
     cumsum_amax_vec = np.cumsum(amax_vec)
@@ -75,13 +76,49 @@ def _compute_amax(amax_vec):
     return cumsum_amax_vec, amax_vec
 
 
-def _selective_decode_encoded_variants(param_set, encoded_variants, row_mask, sel_cols=None):
+def _selective_decode_encoded_variants(
+    param_set:ds.ParameterSet, 
+    encoded_variants, 
+    row_slice, 
+    query_col_ids,
+):
     # TODO: Column mask
 
     if param_set.binarization_flag == gvc.binarization.BIT_PLANE_FLAG:
+        bin_matrices = np.empty(param_set.num_variants_flags, dtype=object)
+        for i_bin_mat in range(param_set.num_variants_flags):
+
+            bin_mat = codec.decode(
+                encoded_variants.variants_payloads[i_bin_mat],
+                encoded_variants.variants_row_ids_payloads[i_bin_mat],
+                encoded_variants.variants_col_ids_payloads[i_bin_mat],
+                param_set.variants_coder_ids[i_bin_mat],
+            )
+            
+            if query_col_ids is None:
+                if col_ids is not None:
+                    bin_mat = bin_mat[:, col_ids]
+                else:
+                    pass
+            else:
+                nqci = cquery.cget_col_ids(query_col_ids, param_set.p)
+                
+                try:
+                    col_ids = col_ids[nqci]
+                except:
+                    col_ids = nqci
+                    
+                bin_mat = bin_mat[:, col_ids]  
+            
+            if param_set.transpose_variants_mat_flags[i_bin_mat]:
+                log.info('Re-transpose binary matrix')
+                bin_mat = bin_mat.T
+
+            bin_matrices.append(bin_mat)
+            
         raise NotImplementedError()
         additional_info = param_set.num_bin_mat
-    elif param_set.binarization_flag in [consts.BinarizationMode.ROW_SPLIT, consts.BinarizationMode.ROW_BIN_SPLIT]:
+    elif param_set.binarization_flag in [consts.BinarizationID.ROW_BIN_SPLIT]:       
         bin_mat, row_ids, col_ids = codec.decode(
             encoded_variants.variants_payloads[0],
             encoded_variants.variants_row_ids_payloads[0],
@@ -89,26 +126,27 @@ def _selective_decode_encoded_variants(param_set, encoded_variants, row_mask, se
             param_set.variants_coder_ids[0],
             unsort=False
         )
-
-        if col_ids is not None:
-            if sel_cols is not None:
-                if not sel_cols.dtype == np.bool:
-                    col_mask = np.zeros(bin_mat.shape[1], dtype=np.bool)
-                    for i_p in range(param_set.p):
-                        col_mask[sel_cols*param_set.p + i_p] = True
-
-                selected_col_ids = col_ids[col_mask]
-
-                bin_mat = bin_mat[:, selected_col_ids]
-            else:
+        
+        if query_col_ids is None:
+            if col_ids is not None:
                 bin_mat = bin_mat[:, col_ids]
-        # Random access of non-sorted block
+            else:
+                pass
         else:
-            pass
+            nqci = cquery.cget_col_ids(query_col_ids, param_set.p)
+            
+            try:
+                col_ids = col_ids[nqci]
+            except:
+                col_ids = nqci
+                
+            bin_mat = bin_mat[:, col_ids]            
+            
+        amax_vec = ds.VectorAMax.from_bytes(
+            encoded_variants.variants_amax_payload.read()
+        ).vector
 
-        amax_vec = ds.VectorAMax.from_bytes(encoded_variants.variants_amax_payload.read()).vector
-
-        selected_row_ids = row_ids[row_mask]
+        selected_row_ids = row_ids[row_slice]
 
         min_row_ids = np.min(selected_row_ids)
         max_row_ids = np.max(selected_row_ids)
@@ -118,8 +156,8 @@ def _selective_decode_encoded_variants(param_set, encoded_variants, row_mask, se
             np.sum(amax_vec[:max_row_ids+1]),
         )
 
-        if param_set.binarization_flag ==  consts.BinarizationMode.ROW_BIN_SPLIT:
-            allele_matrix = gvc.binarization._debinarize_by_rc_bin_split(bin_mat[bin_mat_slice, :], amax_vec[min_row_ids:max_row_ids+1])
+        if param_set.binarization_flag ==  consts.BinarizationID.ROW_BIN_SPLIT:
+            allele_matrix = gvc.binarization.debin_row_bin_split(bin_mat[bin_mat_slice, :], amax_vec[min_row_ids:max_row_ids+1])
             selected_allele_matrix = allele_matrix[selected_row_ids-min_row_ids, :]
         else:
             raise NotImplementedError()
@@ -152,7 +190,7 @@ def _selective_decode_encoded_variants(param_set, encoded_variants, row_mask, se
 def _decode_block_payload(param_set, block: ds.Block):
     log.info('decoding block payload')
 
-    if block.block_header.content_id == ds.TSPEncodedVariants.CONTENT_ID:
+    if block.block_header.content_id == consts.ContentID.GENOTYPE:
         log.info('Decoding EncodedVariants')
 
         return _decode_encoded_variants(param_set, block.block_payload)
@@ -271,7 +309,7 @@ class DecoderContext(object):
             log.error('No access unit with id {} found'.format(access_unit_id))
             raise gvc.errors.GvcError()
 
-        parameter_set_id = self.curr_access_unit.access_unit_header.parameter_set_id
+        parameter_set_id = self.curr_access_unit.header.parameter_set_id
         try:
             self.curr_parameter_set = self.parameter_sets[parameter_set_id]
         except KeyError:
@@ -411,23 +449,31 @@ class Decoder(object):
 
                 _decode_and_write_access_unit(out_f, self.decoder_context)
                 
-    def random_access(self, start_pos, end_pos, sample_id=None):
+    def random_access(self, start_pos, end_pos, sample_ids=None):
         
         if end_pos == -1:
             end_pos = start_pos
+            
+        query_col_ids = self.index.query_columns(sample_ids)
 
-        block_param_set_id_pairs = self.index.get_block_param_set_id_pairs(start_pos, end_pos)
+        #? Query block and parameter set id given position
+        blk_ps_id_pairs = self.index.query_blk(start_pos, end_pos)
 
-        if block_param_set_id_pairs.shape[0]:
+        if blk_ps_id_pairs.shape[0]:
 
-            for i_block in range(block_param_set_id_pairs.shape[0]):
-                block_id, block, param_set_id = block_param_set_id_pairs[i_block, :]
+            for i_block in range(blk_ps_id_pairs.shape[0]):
+                block_id, block, param_set_id = blk_ps_id_pairs[i_block, :]
 
                 row_slice = self.index.get_row_mask(block_id, start_pos, end_pos)
                 if row_slice.start < row_slice.stop:
                     param_set = self.decoder_context.parameter_sets[param_set_id]
 
-                    _selective_decode_encoded_variants(param_set, block.block_payload, row_slice, sample_id)
+                    _selective_decode_encoded_variants(
+                        param_set, 
+                        block.block_payload, 
+                        row_slice, 
+                        query_col_ids
+                    )
 
                 #? No variant found given POSs
                 else:

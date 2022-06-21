@@ -3,9 +3,9 @@ import numpy as np
 import logging as log
 
 from .data_structures import AccessUnit, ParameterSet
-from .data_structures.consts import BinarizationMode
-from .binarization import binarization_str_to_flag
+from .data_structures.consts import BinarizationID
 from .codec import CODEC_STR2ID
+from .binarization import BINARIZATION_STR2ID
 
 signed_allele_dtype = np.int32
 allele_dtype = np.uint32
@@ -21,8 +21,8 @@ def create_parameter_set(
     p:int,
     phasing_matrix,
     additional_info,
-    binarization,
-    codec_name,
+    binarization_id:str,
+    codec_id:str,
     axis,
     sort_rows,
     sort_cols,
@@ -30,13 +30,8 @@ def create_parameter_set(
     parameter_set_id=0
 ):
 
-    # Convert from string to int
-    binarization_flag = binarization_str_to_flag[binarization]
-
-    codec_id = CODEC_STR2ID[codec_name]
-
     # Binarization using bit plane
-    if binarization_flag == 0:
+    if binarization_id in [BinarizationID.BIT_PLANE]:
         num_bin_mat = int(additional_info)
 
         if axis not in (0,1,2):
@@ -50,13 +45,13 @@ def create_parameter_set(
             num_variants_flags = num_bin_mat
 
     # Binarization by row splitting
-    elif binarization_flag in (BinarizationMode.ROW_SPLIT, BinarizationMode.ROW_BIN_SPLIT, BinarizationMode.ROW_BIN_SPLIT2):
+    elif binarization_id in [BinarizationID.ROW_BIN_SPLIT]:
         num_bin_mat = 1
         num_variants_flags = num_bin_mat
 
     else:
-        log.error('Invalid binarization_flag: {}'.format(binarization_flag))
-        raise ValueError('Invalid binarization_flag: {}'.format(binarization_flag))
+        log.error('Invalid binarization_id: {}'.format(binarization_id))
+        raise ValueError('Invalid binarization_id: {}'.format(binarization_id))
 
     #? Handle the case where phasing matrix can be represented by a single value
     if p == 1 or np.all(~phasing_matrix) or np.all(phasing_matrix):
@@ -71,7 +66,7 @@ def create_parameter_set(
             any_missing,
             not_available,
             p,
-            binarization_flag,
+            binarization_id,
             num_bin_mat,
             axis,      # concat_axis
             [sort_rows for _ in range(num_variants_flags)],  # sort_variants_row_flags
@@ -87,7 +82,7 @@ def create_parameter_set(
             any_missing,
             not_available,
             p,
-            binarization_flag,
+            binarization_id,
             num_bin_mat,
             axis,      # concat_axis
             [sort_rows for _ in range(num_variants_flags)],  # sort_variants_row_flags

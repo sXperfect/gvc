@@ -176,6 +176,9 @@ def run(args, run_as_module: bool):
             decoder.decode_all()
             
         elif args.mode == "random-access":
+            # start_pos = args.pos
+            # end_pos = args.pos if args.end == -1 else args.end
+
             decoder = gvc.decoder.Decoder(args.input)
             decoder.random_access(
                 args.pos,
@@ -199,7 +202,7 @@ def run(args, run_as_module: bool):
         encoder = gvc.encoder.Encoder(
             args.input, 
             args.output, 
-            binarization=args.binarization,
+            binarization_name=args.binarization,
             axis=args.axis,
             sort_rows=args.sort_rows,
             sort_cols=args.sort_cols,
@@ -207,7 +210,7 @@ def run(args, run_as_module: bool):
             dist=args.dist,
             solver=args.solver,
             preset_mode=args.preset_mode,
-            encoder=args.encoder,
+            codec_name=args.encoder,
             block_size=args.block_size,
             num_threads=args.num_threads
         )

@@ -2,6 +2,7 @@ data
 build
 tmp
 datasets
+/third_party/
 
 *.so
 *.html

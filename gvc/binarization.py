@@ -7,7 +7,7 @@ import itertools as it
 
 import gvc.common
 
-from .data_structures import consts
+from .data_structures.consts import BinarizationID
 from . import cdebinarize
 
 _phasing_dict = {
@@ -432,7 +432,7 @@ def split_genotype_matrix(genotype_matrix: List[str]):
         return _tensor_to_matrix(allele_tensor), None, p
 
 
-def _binarize_using_bit_plane(matrix, axis=None, **kwargs):
+def bin_bit_plane(matrix, axis=None, **kwargs):
     """
     Binarize a matrix into bitplanes.
     Implements 4.2.1
@@ -473,7 +473,7 @@ def _binarize_using_bit_plane(matrix, axis=None, **kwargs):
 
     return bin_matrices, bit_depth
 
-def _debinarize_using_bit_plane(bin_matrices, bit_depth, axis):
+def debin_bit_plane(bin_matrices, bit_depth, axis):
 
     if axis < 2:
         assert len(bin_matrices) == 1
@@ -495,98 +495,7 @@ def _debinarize_using_bit_plane(bin_matrices, bit_depth, axis):
 
     return matrix
 
-def _binarize_by_row_splitting(matrix, **kwargs):
-    """
-    Binarize a matrix by row splitting.
-    Implements 4.2.2
-
-    Parameters
-    ----------
-    matrix : ndarray
-        The matrix to binarize. Must contain integers greater or equal to zero.
-
-    Returns
-    -------
-    bin_mat : ndarray (2d)
-        Binarized matrix
-    max_val_per_row : ndarray (1d)
-        Maximum value on each row 
-    """
-
-    log.debug('binarizing allele matrix by row splitting')
-
-    nrow = matrix.shape[0]
-
-    max_val_per_row = np.max(matrix, axis=1).astype(gvc.common.max_val_dtype)
-    # Force max value 0 to 1
-    max_val_per_row[max_val_per_row == 0] = 1
-
-    # consider the case when a line has all 0s
-    log.info("Greatest value in the block: {}".format(max_val_per_row.max()))
-    bin_mat_shape = (np.sum(max_val_per_row).astype(int), matrix.shape[1])
-    bin_mat = np.zeros(bin_mat_shape, dtype=gvc.common.bin_dtype)
-
-    r = 0  # row id in bin_mat
-    inBinSubblock = False
-    binSubblockStart = 0
-    for i in range(nrow):  # iterate over rows in matrix
-
-        if max_val_per_row[i] <= 1:  # if row of matrix is binary: copy
-            if not inBinSubblock:
-                inBinSubblock = True
-                binSubblockStart = i
-
-        else:
-
-            # end of binary subblock
-            if inBinSubblock:
-                inBinSubblock = False
-                binSubblockSize = i - binSubblockStart
-                bin_mat[r:r + binSubblockSize, :] = matrix[i - binSubblockSize:i, :]
-                r += binSubblockSize
-
-            # if row of matrix is non-binary, binarize only row and append max_val_per_row[i] rows to bin_mat
-            for rPrime in range(max_val_per_row[i]):
-                bin_mat[r] = (matrix[i] == (rPrime+1))
-                r += 1
-
-    if inBinSubblock:
-        binSubblockSize = nrow - binSubblockStart
-        bin_mat[r:r + binSubblockSize, :] = matrix[nrow - binSubblockSize:nrow, :]
-
-    return bin_mat, max_val_per_row
-
-def _debinarize_by_row_splitting(bin_matrices, amax, *args):
-
-    try:
-        if isinstance(bin_matrices, List):
-            bin_mat = bin_matrices[0]
-        elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 3:
-            bin_mat = bin_matrices[0, :, :]
-        elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 2:
-            bin_mat = bin_matrices
-        else:
-            raise TypeError
-    except TypeError:
-        log.info("Invalid datat type:{}".format(type(bin_matrices)))
-        raise ValueError
-
-    nrows = amax.shape[0]
-    __, ncols = bin_mat.shape
-
-    matrix = np.zeros((nrows, ncols), dtype=gvc.common.allele_dtype)
-
-    irow_bin_mat = 0
-    for i in range(nrows):
-        for j in range(amax[i]):
-            # matrix[i, :] <<= 1
-            matrix[i, :] += ((j+1) * bin_mat[irow_bin_mat+j, :]).astype(gvc.common.allele_dtype)
-
-        irow_bin_mat += amax[i]
-
-    return matrix
-
-def _binarize_by_rc_bin_split(matrix, axis=0, **kwargs):
+def bin_row_bin_split(matrix, **kwargs):
     """
     Binarize a matrix by row splitting.
     Implements 4.2.2
@@ -606,9 +515,6 @@ def _binarize_by_rc_bin_split(matrix, axis=0, **kwargs):
 
     log.debug('binarizing allele matrix by row splitting')
 
-    if axis == 1:
-        matrix = matrix.T
-
     nrow = matrix.shape[0]
 
     bitlen_vect = np.max(matrix, axis=1).astype(np.uint)
@@ -616,7 +522,7 @@ def _binarize_by_rc_bin_split(matrix, axis=0, **kwargs):
     bitlen_vect[bitlen_vect == 0] = 1
 
     # consider the case when a line has all 0s
-    log.info("Greatest value in the block: {}".format(bitlen_vect.max()))
+    log.debug("Greatest value in the block: {}".format(bitlen_vect.max()))
 
     bitlen_vect = np.ceil(np.log2(bitlen_vect + 1)).astype(np.uint16)
     bin_mat_nrows = np.sum(bitlen_vect).astype(np.uint)
@@ -633,13 +539,9 @@ def _binarize_by_rc_bin_split(matrix, axis=0, **kwargs):
 
         i_b += bitlen
 
-    if axis == 1:
-        bin_mat = bin_mat.T
-
     return bin_mat, bitlen_vect
 
-
-def _debinarize_by_rc_bin_split(bin_matrices, bitlen_vect, **kwargs):
+def debin_row_bin_split(bin_matrices, bitlen_vect, **kwargs):
 
     try:
         if isinstance(bin_matrices, List):
@@ -654,104 +556,34 @@ def _debinarize_by_rc_bin_split(bin_matrices, bitlen_vect, **kwargs):
         log.info("Invalid datat type:{}".format(type(bin_matrices)))
         raise ValueError
 
-    # if axis == 1:
-    #     bin_mat = bin_mat.T
-
     matrix = cdebinarize.debin_rc_bin_split(bin_mat, bitlen_vect.astype(np.uint8))
-    # matrix = gvc.debinarize.debin_rc_bin_split(bin_mat, bitlen_vect.astype(np.uint8))
-
-    # if axis == 1:
-    #     matrix = matrix.T
 
     return matrix
 
-def _binarize_rc_bin_split_v2(matrix, axis=0, **kwargs):
-    """
-    Binarize a matrix by row column binary splitting.
-
-    Parameters
-    ----------
-    matrix : ndarray
-        The matrix to binarize. Must contain integers greater or equal to zero.
-
-    Returns
-    -------
-    bin_mat : ndarray (2d)
-        Binarized matrix
-    amax_vect : ndarray (1d)
-        Maximum value on each row 
-    """
-
-    log.debug('binarizing allele matrix by row splitting')
-
-    if axis == 1:
-        matrix = matrix.T
-
-    nrow = matrix.shape[0]
-
-    bitlen_vect = np.max(matrix, axis=1).astype(np.uint)
-    # Force max value 0 to 1
-    bitlen_vect[bitlen_vect == 0] = 1
-
-    # consider the case when a line has all 0s
-    log.info("Greatest value in the block: {}".format(bitlen_vect.max()))
-
-    bitlen_vect = np.ceil(np.log2(bitlen_vect + 1)).astype(np.uint16)
-    bin_mat_nrows = np.sum(bitlen_vect).astype(np.uint)
-    bin_mat_shape = (bin_mat_nrows, matrix.shape[1]+1)
-    bin_mat = np.zeros(bin_mat_shape, dtype=np.bool)
-
-    i_b = 0  # row id in bin_mat
-    for i in range(nrow):  # iterate over rows in matrix
-
-        bitlen = bitlen_vect[i]
-
-        # bin_mat[i_b, 0] = True
-        for i_bit in range(bitlen):
-            bin_mat[i_b + i_bit, 1:] = np.bitwise_and(matrix[i, :], 1<<i_bit).astype(np.bool)
-        
-        bin_mat[i_b+i_bit, 0] = True
-
-        i_b += bitlen
-
-    if axis == 1:
-        bin_mat = bin_mat.T
-
-    return bin_mat, None
-
-avail_binarization = {
-    'bit_plane' : _binarize_using_bit_plane,
-    'row_split' : _binarize_by_row_splitting,
-    'rc_bin_split' : _binarize_by_rc_bin_split,
-    'rc_bin_split_2' : _binarize_rc_bin_split_v2,
+BINARIZATIONS = {
+    BinarizationID.BIT_PLANE: {
+        "name": "bit_plane",
+        "transform": bin_bit_plane,
+        "inverse_transform": debin_bit_plane,
+    },
+    BinarizationID.ROW_BIN_SPLIT: {
+        "name": "row_bin_split",
+        "transform": bin_row_bin_split,
+        "inverse_transform": debin_row_bin_split,
+    }
 }
 
-BIT_PLANE_FLAG = 0
-ROW_SPLIT_FLAG = 1
-RC_BIN_SPLIT_FLAG = 2
-
-avail_debinarization = {
-    0 : _debinarize_using_bit_plane,
-    1 : _debinarize_by_row_splitting,
-    2 : _debinarize_by_rc_bin_split,
-    3 : _debinarize_by_rc_bin_split,
-}
-
-binarization_str_to_flag = {
-    'bit_plane' : 0,
-    'row_split' : 1,
-    'rc_bin_split' : 2,
-    'rc_bin_split_2' : 3
-}
+AVAIL_BINARIZATION_MODES = [v['name'] for v in BINARIZATIONS.values()]
+BINARIZATION_STR2ID = {v["name"]:k for k, v in BINARIZATIONS.items()}
 
 def debinarize_bin_matrices(
     bin_matrices,
     additional_info,
     axis,
-    binarization_flag:int
+    binarization_mode:int
 ):
     try:
-        debinarizer = avail_debinarization[binarization_flag]
+        debinarizer = BINARIZATIONS[binarization_mode]["inverse_transform"]
     except IndexError:
         log.error('Invalid binarization method')
         raise KeyError('Invalid binarization method')
@@ -760,7 +592,7 @@ def debinarize_bin_matrices(
 
 def binarize_allele_matrix(
     matrix, 
-    binarizer=None, 
+    binarization_id:int,
     axis:int=None
 ):
     """
@@ -791,12 +623,12 @@ def binarize_allele_matrix(
     log.debug('binarizing allele matrix')
     
     try:
-        binarization_method = avail_binarization[binarizer]
+        binarizer = BINARIZATIONS[binarization_id]["transform"]
     except KeyError:
         log.error('Invalid binarization method')
         raise KeyError('Invalid binarization method')
 
-    bin_matrices, additional_info = binarization_method(matrix, axis=axis)
+    bin_matrices, additional_info = binarizer(matrix, axis=axis)
     
     if not isinstance(bin_matrices, List):
         bin_matrices = [bin_matrices]

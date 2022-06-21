@@ -40,7 +40,7 @@ Run setup script `setup.sh`
     bash setup.sh
 
 This will create automaticaly a virtual environment with all dependencies installed.
-The newly created virtual environment will be located in `tmp/venv`.
+The newly created python virtual environment will be located in `tmp/venv`.
 
 ---
 ### Entropy Codec
@@ -49,4 +49,5 @@ In order to encode or decode the payloads based on JBIG codec, an external execu
 You can use any of the existing and publicly available JBIG codec implementation.
 We provide an example on how to integrate JBIG-based codec [here](JBIG).
 
-Assume that a generic compressor should be used, such as LZMA or BZIP2, please refer to the documentation [here](CODEC)
+Generic compressors, such as LZMA or BZIP2, are supported.
+Please refer to this [documentation](CODEC) for integration.

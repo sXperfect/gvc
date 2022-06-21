@@ -13,11 +13,11 @@ class ConcatAxis(IntEnum):
     NONE = 2
     TOTAL = 3
 
-class BinarizationMode(IntEnum):
+class BinarizationID(IntEnum):
     BIT_PLANE = 0
-    ROW_SPLIT = 1
+    # ROW_SPLIT = 1
     ROW_BIN_SPLIT = 2
-    ROW_BIN_SPLIT2 = 3
+    # ROW_BIN_SPLIT2 = 3
 
 class CodecID(IntEnum):
     JBIG1 = 0
