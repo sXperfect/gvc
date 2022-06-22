@@ -7,7 +7,7 @@ from .. import utils
 
 class GenotypePayload(object):
     def __init__(self,
-        param_set,
+        param_set:ParameterSet,
         variants_payloads:t.List[bytes],
         variants_row_ids_payloads:t.List[bytes],
         variants_col_ids_payloads:t.List[bytes],
@@ -15,6 +15,8 @@ class GenotypePayload(object):
         phase_payload:bytes=None,
         phase_row_ids_payload:bytes=None, 
         phase_col_ids_payload:bytes=None,
+        missing_rep_val:int=None,
+        na_rep_val:int=None,
     ):
 
         if not isinstance(param_set, ParameterSet):
@@ -27,9 +29,9 @@ class GenotypePayload(object):
         self.variants_payloads = variants_payloads
         self.variants_row_ids_payloads = variants_row_ids_payloads
         self.variants_col_ids_payloads = variants_col_ids_payloads
-        if param_set.binarization_flag in (0,3):
+        if param_set.binarization_id in (0,3):
             self.variants_amax_payload = None
-        elif param_set.binarization_flag in (1,2) and variants_amax_payload is not None:
+        elif param_set.binarization_id in (1,2) and variants_amax_payload is not None:
             self.variants_amax_payload = variants_amax_payload
         else:
             raise ValueError('Invalid binarization flag combination')
@@ -42,7 +44,10 @@ class GenotypePayload(object):
             self.phase_payload = phase_payload
             self.phase_row_ids_payload = phase_row_ids_payload
             self.phase_col_ids_payload = phase_col_ids_payload
+            
 
+        self.missing_rep_val = missing_rep_val
+        self.na_rep_val = na_rep_val
 
     def __len__(self):
 
@@ -82,6 +87,12 @@ class GenotypePayload(object):
             if self.phase_col_ids_payload:
                 length += consts.COL_IDS_SIZE_LEN
                 length += len(self.phase_col_ids_payload)
+                
+        if self.missing_rep_val is not None:
+            length += 1
+            
+        if self.na_rep_val is not None:
+            length += 1
 
         return length
 
@@ -131,6 +142,8 @@ class GenotypePayload(object):
                 total_allele_col_ids_payload_size += consts.COL_IDS_SIZE_LEN
                 total_allele_col_ids_payload_size += len(self.phase_col_ids_payload)
 
+        #TODO: Both missing_rep_val and na_rep_val are not included
+        
         return {
             "NumAlleleBinMat" : num_variants_flags,
             "AlleleBinMat": total_allele_payload_size,
@@ -179,6 +192,12 @@ class GenotypePayload(object):
             if self.phase_col_ids_payload is not None:
                 payload += utils.int2bstr(len(self.phase_col_ids_payload), consts.COL_IDS_SIZE_LEN)
                 payload += self.phase_col_ids_payload
+                
+        if self.missing_rep_val is not None:
+            payload += utils.int2bstr(len(self.missing_rep_val), consts.MISSING_REP_VAL_LEN)
+
+        if self.na_rep_val is not None:
+            payload += utils.int2bstr(len(self.na_rep_val), consts.NA_REP_VAL_LEN)
 
         return payload
 
@@ -246,7 +265,7 @@ class GenotypePayload(object):
             variants_col_ids_payloads.append(variants_col_ids_payload)
 
         variants_amax_payload = None
-        if param_set.binarization_flag in [1, 2]:
+        if param_set.binarization_id in [1, 2]:
             # variants_amax_payload_size_bytes = reader.read(consts.VARIANTS_AMAX_PAYLOAD_SIZE_LEN)
             # variants_amax_payload_size = utils.bstr2int(variants_amax_payload_size_bytes)
             variants_amax_payload_size = reader.read_bytes(consts.VARIANTS_AMAX_PAYLOAD_SIZE_LEN, ret_int=True)
@@ -297,6 +316,16 @@ class GenotypePayload(object):
                     phase_col_ids_payload_size
                 )
                 reader.seek(phase_col_ids_payload_size, 1)
+                
+        if param_set.any_missing_flag:
+            missing_rep_val = reader.read_bytes(consts.MISSING_REP_VAL_LEN, ret_int=True)
+        else:
+            missing_rep_val = None
+            
+        if param_set.not_available_flag:
+            na_rep_val = reader.read_bytes(consts.NA_REP_VAL_LEN, ret_int=True)
+        else:
+            na_rep_val = None
 
         end_pos = reader.tell()
 
@@ -309,6 +338,8 @@ class GenotypePayload(object):
             phase_payload=phase_payload,
             phase_row_ids_payload=phase_row_ids_payload,
             phase_col_ids_payload=phase_col_ids_payload,
+            missing_rep_val=missing_rep_val,
+            na_rep_val=na_rep_val,
         )
 
         assert len(enc_var) == block_payload_size and (end_pos-start_pos) == block_payload_size

@@ -107,7 +107,7 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
 
         if i_var == 0:
             #TODO: is int8 as the datatype correct? genotypes is int16
-            allele_matrix = np.empty((block_size, num_samples, p), dtype=np.int8) 
+            allele_matrix = np.empty((block_size, num_samples, p), dtype=gvc.common.SIGNED_ALLELE_DTYPE) 
             phase_matrix = np.empty((block_size, num_samples, (p-1)), dtype=bool)
             meta_handler.init_block()
 
@@ -127,7 +127,7 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
         if i_var == block_size:
             log.debug('Parsing time: {:.03f}'.format(time.time() - stime))
 
-            allele_matrix, any_missing, not_available = gvc.binarization.adaptive_max_value(allele_matrix)
+            allele_matrix, missing_rep_val, na_rep_val = gvc.binarization.adaptive_max_value(allele_matrix)
 
             allele_matrix = reshape_trans_mat(allele_matrix, 1)
             phase_matrix = reshape_trans_mat(phase_matrix, 1)
@@ -138,8 +138,8 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
                 allele_matrix, 
                 phase_matrix, 
                 p, 
-                any_missing, # any_missing
-                not_available # not_available
+                missing_rep_val, # any_missing
+                na_rep_val # not_available
             )
 
             i_var = 0
@@ -148,7 +148,7 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
 
     vcf_f.close()
 
-    suballele_matrix, any_missing, not_available = gvc.binarization.adaptive_max_value(allele_matrix[:i_var, :])
+    suballele_matrix, missing_rep_val, na_rep_val = gvc.binarization.adaptive_max_value(allele_matrix[:i_var, :])
     subphase_matrix = phase_matrix[:i_var, :]
     
     suballele_matrix = reshape_trans_mat(suballele_matrix, 1)
@@ -161,6 +161,6 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
         suballele_matrix,
         subphase_matrix,
         p, 
-        any_missing,
-        not_available
+        missing_rep_val,
+        na_rep_val
     )

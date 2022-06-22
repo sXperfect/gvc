@@ -5,12 +5,11 @@ import numpy as np
 # from ds.data_unit import DataUnitHeader
 
 import gvc.utils
-import gvc.data_structures
+# import gvc.data_structures
 import gvc.bitstream
-import gvc.binarization
 from .data_structures import consts
 from . import data_structures as ds
-
+from . import binarization
 from . import codec
 from .codec import jbig
 from . import cdebinarize
@@ -37,20 +36,20 @@ def _decode_encoded_variants(
 
         bin_matrices[i_bin_mat] = bin_mat
 
-    if param_set.binarization_flag == consts.BinarizationID.BIT_PLANE:
+    if param_set.binarization_id == consts.BinarizationID.BIT_PLANE:
         additional_info = param_set.num_bin_mat
-    elif param_set.binarization_flag in [consts.BinarizationID.ROW_SPLIT, consts.BinarizationID.ROW_BIN_SPLIT]:
+    elif param_set.binarization_id in [consts.BinarizationID.ROW_SPLIT, consts.BinarizationID.ROW_BIN_SPLIT]:
         additional_info = ds.VectorAMax.from_bytes(encoded_variants.variants_amax_payload.read()).vector
-    elif param_set.binarization_flag == consts.BinarizationID.ROW_BIN_SPLIT2:
+    elif param_set.binarization_id == consts.BinarizationID.ROW_BIN_SPLIT2:
         additional_info = None
     else:
         raise ValueError()
 
-    allele_matrix = gvc.binarization.debinarize_bin_matrices(
-        bin_matrices, additional_info, param_set.concat_axis, param_set.binarization_flag
+    allele_matrix = binarization.debinarize_bin_matrices(
+        bin_matrices, additional_info, param_set.concat_axis, param_set.binarization_id
     )
 
-    allele_matrix = gvc.binarization.undo_adaptive_max_value(
+    allele_matrix = binarization.undo_adaptive_max_value(
         allele_matrix, param_set.any_missing_flag, param_set.not_available_flag)
 
     if param_set.encode_phase_data:
@@ -67,7 +66,7 @@ def _decode_encoded_variants(
     else:
         phasing_matrix = param_set.phase_value
 
-    return gvc.binarization.reconstruct_genotype_matrix(allele_matrix, phasing_matrix, param_set.p)
+    return binarization.reconstruct_genotype_matrix(allele_matrix, phasing_matrix, param_set.p)
     # return allele_matrix, phasing_matrix
 
 def _compute_amax(amax_vec):
@@ -78,17 +77,17 @@ def _compute_amax(amax_vec):
 
 def _selective_decode_encoded_variants(
     param_set:ds.ParameterSet, 
-    encoded_variants, 
-    row_slice, 
-    query_col_ids,
+    encoded_variants:ds.GenotypePayload, 
+    row_slice=None, 
+    query_col_ids=None,
 ):
     # TODO: Column mask
 
-    if param_set.binarization_flag == gvc.binarization.BIT_PLANE_FLAG:
+    if param_set.binarization_id == consts.BinarizationID.BIT_PLANE:
         bin_matrices = np.empty(param_set.num_variants_flags, dtype=object)
         for i_bin_mat in range(param_set.num_variants_flags):
-
-            bin_mat = codec.decode(
+            
+            bin_mat, row_ids, col_ids = codec.decode(
                 encoded_variants.variants_payloads[i_bin_mat],
                 encoded_variants.variants_row_ids_payloads[i_bin_mat],
                 encoded_variants.variants_col_ids_payloads[i_bin_mat],
@@ -117,14 +116,13 @@ def _selective_decode_encoded_variants(
             bin_matrices.append(bin_mat)
             
         raise NotImplementedError()
-        additional_info = param_set.num_bin_mat
-    elif param_set.binarization_flag in [consts.BinarizationID.ROW_BIN_SPLIT]:       
+
+    elif param_set.binarization_id in [consts.BinarizationID.ROW_BIN_SPLIT]:       
         bin_mat, row_ids, col_ids = codec.decode(
             encoded_variants.variants_payloads[0],
             encoded_variants.variants_row_ids_payloads[0],
             encoded_variants.variants_col_ids_payloads[0],
             param_set.variants_coder_ids[0],
-            unsort=False
         )
         
         if query_col_ids is None:
@@ -145,24 +143,29 @@ def _selective_decode_encoded_variants(
         amax_vec = ds.VectorAMax.from_bytes(
             encoded_variants.variants_amax_payload.read()
         ).vector
+        
+        if row_slice is not None:           
+            row_slice_start = np.sum(amax_vec[:row_slice.start])
+            row_slice_end = np.sum(amax_vec[:row_slice.stop])
+            bin_mat_slice = slice(row_slice_start, row_slice_end)
+            if row_ids is None:
+                bin_mat = bin_mat[bin_mat_slice, :]
+                
+            else:
+                bin_mat = bin_mat[row_ids[bin_mat_slice], :]
+                
+            amax_vec = amax_vec[row_slice]      
 
-        selected_row_ids = row_ids[row_slice]
-
-        min_row_ids = np.min(selected_row_ids)
-        max_row_ids = np.max(selected_row_ids)
-
-        bin_mat_slice = slice(
-            np.sum(amax_vec[:min_row_ids]),
-            np.sum(amax_vec[:max_row_ids+1]),
-        )
-
-        if param_set.binarization_flag ==  consts.BinarizationID.ROW_BIN_SPLIT:
-            allele_matrix = gvc.binarization.debin_row_bin_split(bin_mat[bin_mat_slice, :], amax_vec[min_row_ids:max_row_ids+1])
-            selected_allele_matrix = allele_matrix[selected_row_ids-min_row_ids, :]
+        if param_set.binarization_id ==  consts.BinarizationID.ROW_BIN_SPLIT:
+            allele_matrix = binarization.debin_row_bin_split(bin_mat, amax_vec)
         else:
             raise NotImplementedError()
     else:
         raise ValueError("Invalid binarization flag")
+    
+    allele_matrix = binarization.undo_adaptive_max_value(
+        allele_matrix, encoded_variants.missing_rep_val, encoded_variants.na_rep_val,
+    )
 
     if param_set.encode_phase_data:
         phasing_matrix = codec.decode(
@@ -182,7 +185,7 @@ def _selective_decode_encoded_variants(
         phase_val = param_set.phase_value
 
         gt_mat = cdebinarize.reconstruct_genotype_matrix_using_phase_value(
-            selected_allele_matrix, phase_val, param_set.p
+            allele_matrix, phase_val, param_set.p
         )
 
         return gt_mat
@@ -243,7 +246,10 @@ def _decode_and_write_access_unit(out_f, decoder_context):
         log.info(time.time() - stime)
 
 
-def _get_tensor_shape(enc_var, param_set):
+def _get_tensor_shape(
+    enc_var, 
+    param_set:ds.ParameterSet
+):
 
     shapes = []
     for i_bin_mat in range(param_set.num_variants_flags):
@@ -272,14 +278,14 @@ def _get_tensor_shape(enc_var, param_set):
         assert nrows == shape[0]
         assert nrows == shape[1]
 
-    if param_set.binarization_flag == 0:
+    if param_set.binarization_id == consts.BinarizationID.BIT_PLANE:
 
         if param_set.concat_axis == 0:
             nrows = nrows // param_set.num_bin_mat
         elif param_set.concat_axis == 1:
             ncols = ncols // param_set.num_bin_mat
 
-    elif param_set.binarization_flag == 1:
+    elif param_set.binarization_id == consts.BinarizationID.ROW_BIN_SPLIT:
         vector_amax = ds.VectorAMax.from_bytes(enc_var.variants_amax_payload.read()).vector
         nrows += int(np.sum(vector_amax[vector_amax != 1]))
 
@@ -449,11 +455,12 @@ class Decoder(object):
 
                 _decode_and_write_access_unit(out_f, self.decoder_context)
                 
-    def random_access(self, start_pos, end_pos, sample_ids=None):
+    def random_access(self, pos, sample_ids):
         
-        if end_pos == -1:
-            end_pos = start_pos
+        start_pos, end_pos = pos
+        assert start_pos <= end_pos, "Genomic start position must be less or equal to end position"
             
+        sample_ids = np.array(sample_ids)
         query_col_ids = self.index.query_columns(sample_ids)
 
         #? Query block and parameter set id given position

@@ -111,17 +111,13 @@ The coding of a genotype matrix G comprises the following steps:
    matrix P
 """
 
-# import os
 import sys
 import logging as log
 
-import gvc.encoder
-import gvc.decoder
-import gvc.settings
-import gvc.binarization
-import gvc.sort
-
+from .encoder import Encoder
+from .decoder import Decoder
 from .settings import PROGRAM_NAME, PROGRAM_DESC, LOG_LEVELS
+
 
 def run(args, run_as_module: bool):
     #? Basic log config
@@ -172,17 +168,13 @@ def run(args, run_as_module: bool):
     if args.mode in ["decode", "random-access"]:
 
         if args.mode == "decode":
-            decoder = gvc.decoder.Decoder(args.input, args.output)
+            decoder = Decoder(args.input, args.output)
             decoder.decode_all()
             
         elif args.mode == "random-access":
-            # start_pos = args.pos
-            # end_pos = args.pos if args.end == -1 else args.end
-
-            decoder = gvc.decoder.Decoder(args.input)
+            decoder = Decoder(args.input)
             decoder.random_access(
                 args.pos,
-                args.end,
                 args.samples
             )
             
@@ -199,7 +191,7 @@ def run(args, run_as_module: bool):
         #     decoder.cprofile()
 
     elif args.mode == "encode":
-        encoder = gvc.encoder.Encoder(
+        encoder = Encoder(
             args.input, 
             args.output, 
             binarization_name=args.binarization,

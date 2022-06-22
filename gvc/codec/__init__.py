@@ -141,9 +141,9 @@ def encode(
 
         col_idx_allele_mat_payloads.append(col_ids_payload)
         
-    if param_set.binarization_flag in (0, 3):
+    if param_set.binarization_id in (0, 3):
         variants_amax_payload = None
-    elif param_set.binarization_flag in (1,2):
+    elif param_set.binarization_id in (1,2):
         variants_amax_payload = encode_vector(additional_info)
     else:
         raise ValueError('Invalid binarization flag')
@@ -181,7 +181,6 @@ def decode(
     row_ids_payload:bytes, 
     col_ids_payload:bytes, 
     coder_id:int,
-    unsort=True
 ):
     """
 
@@ -211,10 +210,6 @@ def decode(
             pass
         row_ids = decode_permutation(row_ids_payload, nrows)
 
-        log.info('Unsort rows')
-
-        if unsort:
-            bin_mat = bin_mat[row_ids, :]
     else:
         row_ids = None
 
@@ -226,14 +221,7 @@ def decode(
 
         col_ids = decode_permutation(col_ids_payload, ncols)
 
-        log.info('Unsort columns')
-
-        if unsort:
-            bin_mat = bin_mat[:, col_ids]
     else:
         col_ids = None
 
-    if unsort:
-        return bin_mat
-    else:
-        return bin_mat, row_ids, col_ids
+    return bin_mat, row_ids, col_ids

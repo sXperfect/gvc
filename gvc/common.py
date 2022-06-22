@@ -7,17 +7,15 @@ from .data_structures.consts import BinarizationID
 from .codec import CODEC_STR2ID
 from .binarization import BINARIZATION_STR2ID
 
-signed_allele_dtype = np.int32
-allele_dtype = np.uint32
-
-phasing_dtype = np.bool
-
-max_val_dtype = allele_dtype
-bin_dtype = np.bool
+SIGNED_ALLELE_DTYPE = np.int8
+ALLELE_DTYPE = np.uint8
+PHASING_DTYPE = np.bool
+MAX_VAL_DTYPE = ALLELE_DTYPE
+BIN_DTYPE = np.bool
 
 def create_parameter_set(
-    any_missing,
-    not_available,
+    missing_rep_val, 
+    na_rep_val,
     p:int,
     phasing_matrix,
     additional_info,
@@ -27,7 +25,7 @@ def create_parameter_set(
     sort_rows,
     sort_cols,
     transpose=False,
-    parameter_set_id=0
+    parameter_set_id:int=0
 ):
 
     # Binarization using bit plane
@@ -63,8 +61,8 @@ def create_parameter_set(
 
         param_set = ParameterSet(
             parameter_set_id,
-            any_missing,
-            not_available,
+            missing_rep_val is not None, 
+            na_rep_val is not None,
             p,
             binarization_id,
             num_bin_mat,
@@ -79,8 +77,8 @@ def create_parameter_set(
     else:
         param_set = ParameterSet(
             parameter_set_id,
-            any_missing,
-            not_available,
+            missing_rep_val is not None, 
+            na_rep_val is not None,
             p,
             binarization_id,
             num_bin_mat,
@@ -101,7 +99,7 @@ def create_parameter_set(
 def store_access_unit(
     f,
     access_unit_id,
-    parameter_set,
+    parameter_set:ParameterSet,
     blocks,
 ):
     acc_unit = AccessUnit.from_blocks(

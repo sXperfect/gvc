@@ -69,11 +69,6 @@ class Index():
             return None
 
     def query_blk(self, start_pos, end_pos):
-        # NOTE: Slower version
-        # block_mask = (self.root_idx[:, 0] <= start_pos) & (self.root_idx[:, 1] >= end_pos)
-        # return self.root_lookup[block_mask]
-
-        # ? NOTE: Faster version using binary search
         start_row = np.searchsorted(self.root_idx[:,0], start_pos, side='right')-1
         end_row = np.searchsorted(self.root_idx[:,1], end_pos, side='left')+1
 
@@ -84,22 +79,11 @@ class Index():
         curr_block_idx = self.block_idx[block_id]
 
         if curr_block_idx is None:
-            # blk_idx_fpath = join(self.index_dpath, '.bin'.format(block_id))
-
-            # with open(blk_idx_fpath, 'rb') as f:
-            #     payload = f.read()
-
-            # curr_block_idx = np.frombuffer(payload, dtype=int)
             blk_idx_fpath = join(self.index_dpath, f"{block_id}.npy")
             curr_block_idx = np.load(blk_idx_fpath)
 
             self.block_idx[block_id] = curr_block_idx
-
-        # NOTE: Slower version
-        # row_mask = (start_pos <= curr_block_idx) & (curr_block_idx <= end_pos)
-        # return row_mask
-
-        # NOTE: Faster version using binary search
+            
         start_row = np.searchsorted(curr_block_idx, start_pos, side='left')
         end_row = np.searchsorted(curr_block_idx, end_pos, side='right')
 
@@ -108,7 +92,6 @@ class Index():
     def query_columns(self, sample_ids):
         
         if sample_ids is None:
-            # return slice(0, self.num_samples, None)
             return None
         
         else:            

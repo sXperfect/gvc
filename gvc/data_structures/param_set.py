@@ -11,8 +11,8 @@ class ParameterSet():
         parameter_set_id: int,
         any_missing_flag:bool,
         not_available_flag:bool,
-        p,
-        binarization_flag:int, 
+        p:int,
+        binarization_id:int, 
         num_bin_mat: int,
         concat_axis: int,
         sort_variants_row_flags: t.List[bool],
@@ -31,12 +31,12 @@ class ParameterSet():
         self.any_missing_flag = any_missing_flag
         self.not_available_flag = not_available_flag
         self.p = p
-        self.binarization_flag = binarization_flag
+        self.binarization_id = binarization_id
 
         self.num_bin_mat = None
         self.concat_axis = None
         # Binarization using bit plane
-        if self.binarization_flag == 0:
+        if self.binarization_id in [consts.BinarizationID.BIT_PLANE]:
             self.num_bin_mat = num_bin_mat
             # 2 bits : 0, 1, 2 (do not concatenate)
             if concat_axis not in (0, 1, 2):
@@ -52,7 +52,7 @@ class ParameterSet():
                 self.num_variants_flags = num_bin_mat         
 
         # Binarization by row splitting
-        elif self.binarization_flag in (1,2,3):
+        elif self.binarization_id in [consts.BinarizationID.ROW_BIN_SPLIT]:
             self.num_variants_flags = 1
         else:
             raise ValueError('Invalid binarization flag')
@@ -108,7 +108,7 @@ class ParameterSet():
             return False
         if self.p != other.p:
             return False
-        if self.binarization_flag != other.binarization_flag:
+        if self.binarization_id != other.binarization_id:
             return False
         if self.num_bin_mat != other.num_bin_mat:
             return False
@@ -171,9 +171,9 @@ class ParameterSet():
         # Minimum value of p is 1, thus shifted by 1 to reduce bits required
         data_bitio.write(self.p-1, consts.P_BITLEN)
 
-        data_bitio.write(self.binarization_flag, consts.BINARIZATION_BITLEN)
+        data_bitio.write(self.binarization_id, consts.BINARIZAION_ID_BITLEN)
 
-        if self.binarization_flag == 0:
+        if self.binarization_id == 0:
             data_bitio.write(self.num_bin_mat, consts.NUM_BIN_MAT_BITLEN)
             data_bitio.write(self.concat_axis, consts.CONCAT_AXIS_BITLEN)
 
@@ -195,18 +195,6 @@ class ParameterSet():
 
         data_bitio.align_to_byte()
 
-        # if with_header:
-        #     header_bitio = bitstream.BitIO()
-        #     header_bitio.write(consts.DataUnitType.PARAMETER_SET, consts.DATA_UNIT_TYPE_LEN * 8)
-        #     header_bitio.write(
-        #         consts.DATA_UNIT_TYPE_LEN + consts.DATA_UNIT_SIZE_LEN + data_bitio.len_in_byte(),
-        #         consts.DATA_UNIT_SIZE_LEN*8
-        #     )
-
-        #     return header_bitio, data_bitio
-
-        # else:
-        #     return data_bitio
         return data_bitio
 
     def to_bytes(self, header=True):
@@ -241,9 +229,6 @@ class ParameterSet():
 
         start_pos = bitstream_reader.tell()
 
-        # Belongs to header
-        # data_len = bitstream_reader.read_bytes(consts.DATA_UNIT_SIZE_LEN)
-
         parameter_set_id = bitstream_reader.read_bytes(consts.PARAMETER_SET_ID_LEN, ret_int=True)
 
         any_missing_flag = bitstream_reader.read_bits(consts.ANY_MISSING_FLAG_BITLEN)
@@ -252,18 +237,18 @@ class ParameterSet():
         # Revert shifted value
         p = bitstream_reader.read_bits(consts.P_BITLEN) + 1
 
-        binarization_flag = bitstream_reader.read_bits(consts.BINARIZATION_BITLEN)
+        binarization_id = bitstream_reader.read_bits(consts.BINARIZAION_ID_BITLEN)
 
         num_bin_mat = None
         concat_axis = None
-        if binarization_flag == 0:
+        if binarization_id == consts.BinarizationID.BIT_PLANE:
             num_bin_mat = bitstream_reader.read_bits(consts.NUM_BIN_MAT_BITLEN)
             concat_axis = bitstream_reader.read_bits(consts.CONCAT_AXIS_BITLEN)            
 
         encode_phase_data = bitstream_reader.read_bits(consts.ENCODE_PHASE_DATA_BITLEN)
 
         # Binarization using bit plane
-        if binarization_flag == 0:
+        if binarization_id == consts.BinarizationID.BIT_PLANE:
             if concat_axis in (0, 1):
                 num_variants_flags = 1
 
@@ -271,7 +256,7 @@ class ParameterSet():
                 num_variants_flags = num_bin_mat         
 
         # Binarization by row splitting
-        elif binarization_flag in [1, 2, 3]:
+        elif binarization_id in [consts.BinarizationID.ROW_BIN_SPLIT]:
             num_variants_flags = 1
         
         sort_variants_row_flags = []
@@ -310,7 +295,7 @@ class ParameterSet():
             any_missing_flag,
             not_available_flag,
             p,
-            binarization_flag,
+            binarization_id,
             num_bin_mat,
             concat_axis,
             sort_variants_row_flags,

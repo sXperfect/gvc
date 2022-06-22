@@ -45,9 +45,8 @@ decode_parser.add_argument('output', metavar='output_file_path', help='output fi
 #? Random Access
 ra_parser = subparsers.add_parser('random-access')
 ra_parser.add_argument('input', metavar='input_file_path', help='input file path')
-ra_parser.add_argument('pos', type=int, help='Position of genomic variants to be decoded. If "--end END_POS" is set, then all variants at given range are decoded')
-ra_parser.add_argument('--end', type=int, default=-1, help='End position')
-ra_parser.add_argument('--samples', default=None, help='List of samples to be decoded. Default: all samples')
+ra_parser.add_argument('--pos', type=int, help='The start and end position of genomic variants to be decoded.', nargs=2)
+ra_parser.add_argument('--samples', type=str, help='List of samples to be decoded. Default: all samples', nargs='+')
 
 args = parser.parse_args()
 

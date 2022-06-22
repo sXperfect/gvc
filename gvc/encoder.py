@@ -11,7 +11,7 @@ from .sort import sort
 from .codec import CODEC_STR2ID, encode
 
 def run_core(raw_block, ps_params, tsp_params):  
-    allele_matrix, phasing_matrix, p, any_missing, not_available = raw_block
+    allele_matrix, phasing_matrix, p, missing_rep_val, na_rep_val = raw_block
     binarization_id,codec_id,axis,sort_rows,sort_cols,transpose = ps_params
     dist_f_name, solver_name, solver_profile = tsp_params
 
@@ -26,8 +26,8 @@ def run_core(raw_block, ps_params, tsp_params):
     #? Create parameter based on binarization and encoder parameter
     log.info('Create parameter set')
     new_param_set = gvc.common.create_parameter_set(
-        any_missing,
-        not_available,
+        missing_rep_val,
+        na_rep_val,
         p,
         phasing_matrix,
         additional_info,
@@ -56,7 +56,7 @@ def run_core(raw_block, ps_params, tsp_params):
 
     # Initialize EncodedVariant, ParameterSet is not stored internally in EncodedVariants
     # Order of arguments here is important (See EncodedVariants)
-    enc_variant = ds.GenotypePayload(new_param_set, *data_bytes)
+    enc_variant = ds.GenotypePayload(new_param_set, *data_bytes, missing_rep_val, na_rep_val)
 
     # Create new Block and store
     block = ds.Block.from_encoded_variant(enc_variant)
@@ -279,14 +279,12 @@ class Encoder(object):
             log.error('Invalid value for num_threads')
             raise ValueError('Invalid value for num_threads')
 
-        log.info('Encoding complete')
+        log.debug('Encoding complete')
 
 
 def worker_reader(lock_A, queue_A, input_fpath, output_fpath, block_size, buffer_size=1):
 
-    if input_fpath.endswith('.txt'):
-        raise RuntimeError("Deprecated!")
-    elif input_fpath.endswith('.vcf') or input_fpath.endswith('vcf.gz'):
+    if input_fpath.endswith('.vcf') or input_fpath.endswith('vcf.gz'):
         iterator = gvc.reader.vcf_genotypes_reader(input_fpath, output_fpath, block_size)
     else:
         raise ValueError('Invalid Format')
@@ -323,7 +321,7 @@ def worker_reader(lock_A, queue_A, input_fpath, output_fpath, block_size, buffer
         finally:
             lock_A.release()
 
-    log.info('Stop')
+    log.debug('Stop')
 
 def worker_encoder(lock_A, queue_A, lock_B, queue_B, ps_params, tsp_params):
 
@@ -363,7 +361,7 @@ def worker_encoder(lock_A, queue_A, lock_B, queue_B, ps_params, tsp_params):
             finally:
                 lock_B.release()
 
-    log.info('Stop')
+    log.debug('Stop')
 
 def worker_writer(lock_B, queue_B, output_fpath, num_processes=0):
     acc_unit_param_set = None  # Act as pointer, pointing to parameter set of current AccessUnit
@@ -400,10 +398,10 @@ def worker_writer(lock_B, queue_B, output_fpath, num_processes=0):
 
                 if block_ID == -1:
                     num_killed += 1
-                    log.info('Number of killed {}'.format(num_killed))
+                    log.debug('Number of processes killed {}'.format(num_killed))
 
                     if num_killed >= num_processes:
-                        log.info('EOF reached')
+                        log.debug('All workers are killed')
 
                         retrieve_new_data = False
                         # break
@@ -421,16 +419,16 @@ def worker_writer(lock_B, queue_B, output_fpath, num_processes=0):
                 # If parameter set of current block different from parameter set of current access unit,
                 # store blocks as access unit
                 if acc_unit_param_set is None:
-                    log.info('Parameter set of access unit is None -> set to new parameter set')
+                    log.debug('Parameter set of access unit is None -> set to new parameter set')
                     acc_unit_param_set = new_param_set
                     param_sets.append(acc_unit_param_set)
                     output_f.write(acc_unit_param_set.to_bytes())
 
                 elif new_param_set != acc_unit_param_set or len(blocks) == max_num_blocks_per_acc_unit:
-                    log.info('Parameter set and parameter set of current access unit is different')
+                    log.debug('Parameter set and parameter set of current access unit is different')
 
                     # Store blocks as an Access Unit
-                    log.info('Store access unit ID {:03d}, num blocks: {:d}'.format(acc_unit_id, len(blocks)))
+                    log.debug('Store access unit ID {:03d}, num blocks: {:d}'.format(acc_unit_id, len(blocks)))
                     gvc.common.store_access_unit(output_f, acc_unit_id, acc_unit_param_set, blocks)
 
                     # Initialize values for the new AccessUnit
@@ -446,7 +444,7 @@ def worker_writer(lock_B, queue_B, output_fpath, num_processes=0):
                     
                     # If parameter set is unique, store in list of parameter sets and store in GVC file
                     if is_param_set_unique:
-                        log.info('New parameter set is unique')
+                        log.debug('New parameter set is unique')
                         new_param_set.parameter_set_id = len(param_sets)
 
                         acc_unit_param_set = new_param_set
@@ -455,7 +453,7 @@ def worker_writer(lock_B, queue_B, output_fpath, num_processes=0):
                         output_f.write(acc_unit_param_set.to_bytes())
 
                     else:
-                        log.info('New parameter set is not unique')
+                        log.debug('New parameter set is not unique')
                         del new_param_set
                         acc_unit_param_set = stored_param_set
 
@@ -474,14 +472,14 @@ def worker_writer(lock_B, queue_B, output_fpath, num_processes=0):
             finally:
                 lock_B.release()
 
-            log.info("QueueB qsize: {}".format(qsize))
-            log.info("Dict: {}".format(block_dict))
-            log.info("Dict size: {}".format(len(block_dict)))
-            log.info("curr_block_ID:{}".format(curr_block_ID))
+            log.debug("QueueB qsize: {}".format(qsize))
+            log.debug("Dict: {}".format(block_dict))
+            log.debug("Dict size: {}".format(len(block_dict)))
+            log.debug("curr_block_ID:{}".format(curr_block_ID))
 
             # Store the remaining blocks
             log.info('Store the remaining blocks')
-            log.info('Store access unit ID {:03d}, num blocks: {:d}'.format(acc_unit_id, len(blocks)))
+            log.debug('Store access unit ID {:03d}, num blocks: {:d}'.format(acc_unit_id, len(blocks)))
             gvc.common.store_access_unit(output_f, acc_unit_id, acc_unit_param_set, blocks)
 
     log.info('Stop')

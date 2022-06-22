@@ -64,12 +64,12 @@ cdef char gt_val_to_gt_char(np.int8_t v):
 @cython.boundscheck(False) # turn off bounds-checking for entire function
 @cython.wraparound(False)  # turn off negative index wrapping for entire function
 @cython.overflowcheck.fold(False)
-def reconstruct_genotype_matrix_using_phase_value(np.ndarray[np.uint8_t, ndim=2] allele_mat, int phase_val, int p):
+def recon_gt_mat_with_phase_val(np.ndarray[np.int8_t, ndim=2] allele_mat, bool phase_val, int p):
 
     cdef Py_ssize_t length
     cdef char* gt_mat
 
-    creconstruct_genotype_matrix_using_phase_value(
+    crecon_gt_mat_with_phase_val(
         &gt_mat, &length, allele_mat, phase_val, p
     )
 
@@ -81,12 +81,12 @@ def reconstruct_genotype_matrix_using_phase_value(np.ndarray[np.uint8_t, ndim=2]
 @cython.boundscheck(False) #? turn off bounds-checking for entire function
 @cython.wraparound(False)  #? turn off negative index wrapping for entire function
 @cython.overflowcheck.fold(False)
-cdef void creconstruct_genotype_matrix_using_phase_value(
+cdef void crecon_gt_mat_with_phase_val(
     char** gt_mat, 
     Py_ssize_t *length, 
     # np.ndarray[np.uint8_t, ndim=2] allele_mat, 
-    char[:, :] allele_mat,
-    int phase_val, 
+    np.int8_t[:, :] allele_mat,
+    bool phase_val, 
     int p
 ):
 

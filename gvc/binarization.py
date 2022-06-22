@@ -19,10 +19,10 @@ _phasing_val_to_str = ['|', '/']
 
 def _gt_code_to_int(gt_code):
     try:
-        return gvc.common.allele_dtype(gt_code)
+        return gvc.common.ALLELE_DTYPE(gt_code)
     except ValueError:
         if gt_code == ".":
-            return gvc.common.signed_allele_dtype(-1)
+            return gvc.common.SIGNED_ALLELE_DTYPE(-1)
         else:
             raise ValueError()
 
@@ -272,35 +272,27 @@ def adaptive_max_value(allele_matrix):
     na_mask = allele_matrix == -2
 
     if np.any(dot_mask):
-        any_missing = True
-
-        new_max_val = np.max(allele_matrix) + 1
-        allele_matrix[dot_mask] = new_max_val
+        missing_rep_val = np.max(allele_matrix) + 1
+        allele_matrix[dot_mask] = missing_rep_val
     else:
-        any_missing = False
+        missing_rep_val = None
 
     if np.any(na_mask):
-        not_available = True
-
-        new_max_val = np.max(allele_matrix) + 1
-        allele_matrix[na_mask] = new_max_val
+        na_rep_val = np.max(allele_matrix) + 1
+        allele_matrix[na_mask] = na_rep_val
     else:
-        not_available = False
+        na_rep_val = None
 
-    return allele_matrix.astype(np.uint8), any_missing, not_available
+    return allele_matrix.astype(gvc.common.ALLELE_DTYPE), missing_rep_val, na_rep_val
 
-def undo_adaptive_max_value(allele_array, any_missing_flag, not_available_flag):
-    allele_array = allele_array.astype(gvc.common.signed_allele_dtype)
+def undo_adaptive_max_value(allele_array, missing_rep_val, na_rep_val):
+    allele_array = allele_array.astype(gvc.common.SIGNED_ALLELE_DTYPE)
 
-    if not_available_flag:
-        true_max_val = np.max(allele_array)
+    if na_rep_val is not None:
+        allele_array[allele_array == na_rep_val] = -2
 
-        allele_array[allele_array == true_max_val] = -2
-
-    if any_missing_flag:
-        true_max_val = np.max(allele_array)
-
-        allele_array[allele_array == true_max_val] = -1
+    if missing_rep_val is not None:
+        allele_array[allele_array == missing_rep_val] = -1
     
     return allele_array
 
@@ -333,11 +325,11 @@ def split_genotype_matrix(genotype_matrix: List[str]):
     p_candidates = ((np.vectorize(len)(genotype_matrix[0,:]) + 1) / 2).astype(int) # TODO: is it sufficient to check only first column?
     p = np.max(p_candidates)
 
-    allele_tensor = np.zeros([m, n, p], dtype=gvc.common.signed_allele_dtype)
+    allele_tensor = np.zeros([m, n, p], dtype=gvc.common.SIGNED_ALLELE_DTYPE)
     assert(np.issubdtype(allele_tensor.dtype, np.signedinteger))
 
     if p-1 > 0:
-        phasing_tensor = np.zeros([m, n, (p - 1)], dtype=gvc.common.phasing_dtype)
+        phasing_tensor = np.zeros([m, n, (p - 1)], dtype=gvc.common.PHASING_DTYPE)
     else:
         phasing_tensor = None
 
@@ -387,7 +379,7 @@ def split_genotype_matrix(genotype_matrix: List[str]):
                         # Insert additional depth with values -2, which represent *NotAvailable*
                         allele_tensor = np.concatenate((
                             allele_tensor,
-                            -2*np.ones([m, n, p_new - p], dtype=gvc.common.signed_allele_dtype)
+                            -2*np.ones([m, n, p_new - p], dtype=gvc.common.SIGNED_ALLELE_DTYPE)
                         ), axis=2)
 
                         assert(np.issubdtype(allele_tensor.dtype, np.signedinteger))
@@ -453,10 +445,10 @@ def bin_bit_plane(matrix, axis=None, **kwargs):
 
     bit_planes = []
 
-    bit_depth = np.ceil(np.log2(matrix.max() + 1)).astype(gvc.common.allele_dtype)
+    bit_depth = np.ceil(np.log2(matrix.max() + 1)).astype(gvc.common.ALLELE_DTYPE)
 
     for i_bit in range(bit_depth):
-        bit_tensor = np.bitwise_and(matrix, int(2**i_bit)).astype(gvc.common.bin_dtype)
+        bit_tensor = np.bitwise_and(matrix, int(2**i_bit)).astype(gvc.common.BIN_DTYPE)
         bit_planes.append(bit_tensor)
     
     # Concatenate binary matrices
@@ -489,9 +481,9 @@ def debin_bit_plane(bin_matrices, bit_depth, axis):
 
     assert bit_depth == len(bit_planes)
 
-    matrix = bit_planes[0].astype(gvc.common.allele_dtype)
+    matrix = bit_planes[0].astype(gvc.common.ALLELE_DTYPE)
     for i in range(1, bit_depth):
-        matrix += 2**i * bit_planes[i].astype(gvc.common.allele_dtype)
+        matrix += 2**i * bit_planes[i].astype(gvc.common.ALLELE_DTYPE)
 
     return matrix
 
