@@ -42,9 +42,9 @@ site. For a diploid organism, its value indicates the two alleles carried by the
 allele, 1 for the first ALT allele, 2 for the second ALT allele, etc. When there is for example a single ALT allele
 (which is by far the most common case), the value will be either:
 
-- 0/0 – the sample is homozygous reference
-- 0/1 – the sample is heterozygous, carrying one copy of each the REF and ALT alleles
-- 1/1 – the sample is homozygous alternate
+- 0/0 - the sample is homozygous reference
+- 0/1 - the sample is heterozygous, carrying one copy of each the REF and ALT alleles
+- 1/1 - the sample is homozygous alternate
 
 For non-diploids, the same pattern applies; in the haploid case there will be just a single number; for polyploids there
 will be more, e.g. 4 numbers for a tetraploid organism.
@@ -139,12 +139,6 @@ def run(args, run_as_module: bool):
     log.info('    {}'.format(PROGRAM_DESC))
     log.info('********************************************************************************')
 
-    #? Log whether we're running as module (i.e., python3 -m gvc) or script (i.e., python3 /path/to/app.py)
-    if run_as_module:
-        log.debug('running as module')
-    else:
-        log.debug('running as script')
-
     #? Log the command line
     if not run_as_module:
         log.debug('command line: %s', ' '.join(sys.argv))
@@ -154,41 +148,17 @@ def run(args, run_as_module: bool):
     for arg in vars(args):
         log.debug('  %-16s: %s', arg, getattr(args, arg))
 
-    #? Output file
-    # if args.output is None:
-        # # Replace existing extension or append new extension
-        # if args.decode:
-        #     args.output = os.path.splitext(args.input)[0] + '.genotype_matrix'
-        # else:
-        #     args.output = os.path.splitext(args.input)[0] + '.gvc'
-        # log.info('writing output to: {}'.format(args.output))
-
-    #? Run
-    # if args.mode in ["decode", "compare", "stat", "cprofile"]:
-    if args.mode in ["decode", "random-access"]:
-
-        if args.mode == "decode":
+    if args.mode == "decode":
+        if args.pos is None and args.samples is None:
             decoder = Decoder(args.input, args.output)
             decoder.decode_all()
             
-        elif args.mode == "random-access":
-            decoder = Decoder(args.input)
+        else:
+            decoder = Decoder(args.input, args.output)
             decoder.random_access(
                 args.pos,
                 args.samples
             )
-            
-        else:
-            raise NotImplementedError(args.mode)
-
-        # elif args.mode == "compare":
-        #     decoder.compare()
-
-        # elif args.mode == "stat":
-        #     decoder.stat()
-
-        # elif args.mode == "cprofile":
-        #     decoder.cprofile()
 
     elif args.mode == "encode":
         encoder = Encoder(

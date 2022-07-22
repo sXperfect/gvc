@@ -1,7 +1,6 @@
-data
 build
 tmp
-datasets
+/data*
 /third_party/
 
 *.so
