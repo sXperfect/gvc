@@ -9,6 +9,7 @@ import gvc.data_structures
 from .utils import catchtime
 from .dist import DIST_FUNC, comp_cost_mat
 from .solver import SOLVERS
+from .common import PERMUTATION_DTYPE
 
 def _sort_matrix(
     bin_mat,
@@ -84,7 +85,10 @@ def _sort_matrix(
             with catchtime() as t:
                 row_ids = solver.sort_rows(bin_mat)
             log.debug("Total time: {:.2f}s".format(t.time))
-            
+        
+        sorted_bin_mat = sorted_bin_mat[row_ids, :]
+        row_ids = np.argsort(row_ids).astype(PERMUTATION_DTYPE)
+        
     else:
         row_ids = None
     
@@ -106,10 +110,11 @@ def _sort_matrix(
             log.debug("Total time: {:.2f}s".format(t.time))
 
         sorted_bin_mat = sorted_bin_mat[:, col_ids]
+        col_ids = np.argsort(col_ids).astype(PERMUTATION_DTYPE)
     else:
         col_ids = None
 
-    return sorted_bin_mat, np.argsort(row_ids), np.argsort(col_ids)
+    return sorted_bin_mat, row_ids, col_ids
 
 def sort(
     param_set:gvc.data_structures.ParameterSet,

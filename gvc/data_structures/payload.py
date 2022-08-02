@@ -142,8 +142,7 @@ class GenotypePayload(object):
                 total_allele_col_ids_payload_size += consts.COL_IDS_SIZE_LEN
                 total_allele_col_ids_payload_size += len(self.phase_col_ids_payload)
 
-        #TODO: Both missing_rep_val and na_rep_val are not included
-        
+        #TODO: Both missing_rep_val and na_rep_val are not yet included
         return {
             "NumAlleleBinMat" : num_variants_flags,
             "AlleleBinMat": total_allele_payload_size,
@@ -219,8 +218,6 @@ class GenotypePayload(object):
         variants_col_ids_payloads = []
 
         for i_bin_mat in range(param_set.num_variants_flags):
-            # variants_payload_size_b = reader.read(consts.VARIANTS_PAYLOAD_SIZES_LEN)
-            # variants_payload_size = utils.bstr2int(variants_payload_size_b)
             variants_payload_size = reader.read_bytes(consts.VARIANTS_PAYLOAD_SIZES_LEN, ret_int=True)
 
             variants_payload = RandomAccessHandler(
@@ -235,8 +232,6 @@ class GenotypePayload(object):
             variants_row_ids_payload = None
             if param_set.sort_variants_row_flags[i_bin_mat]:
                 
-                # variants_row_ids_payload_size_b = reader.read(consts.ROW_IDS_SIZE_LEN)
-                # variants_row_ids_payload_size = utils.bstr2int(variants_row_ids_payload_size_b)
                 variants_row_ids_payload_size = reader.read_bytes(consts.ROW_IDS_SIZE_LEN, ret_int=True)
 
                 variants_row_ids_payload = RandomAccessHandler(
@@ -250,8 +245,6 @@ class GenotypePayload(object):
 
             variants_col_ids_payload = None
             if param_set.sort_variants_col_flags[i_bin_mat]:
-                # variants_col_ids_payload_size_b = reader.input.read(consts.COL_IDS_SIZE_LEN)
-                # variants_col_ids_payload_size = utils.bstr2int(variants_col_ids_payload_size_b)
                 variants_col_ids_payload_size = reader.read_bytes(consts.COL_IDS_SIZE_LEN, ret_int=True)
                 
 
@@ -266,8 +259,6 @@ class GenotypePayload(object):
 
         variants_amax_payload = None
         if param_set.binarization_id in [1, 2]:
-            # variants_amax_payload_size_bytes = reader.read(consts.VARIANTS_AMAX_PAYLOAD_SIZE_LEN)
-            # variants_amax_payload_size = utils.bstr2int(variants_amax_payload_size_bytes)
             variants_amax_payload_size = reader.read_bytes(consts.VARIANTS_AMAX_PAYLOAD_SIZE_LEN, ret_int=True)
 
             variants_amax_payload = RandomAccessHandler(
@@ -282,8 +273,6 @@ class GenotypePayload(object):
         phase_col_ids_payload = None
 
         if param_set.encode_phase_data:
-            # phase_payload_size_b = reader.read(consts.PHASE_PAYLOAD_SIZE_LEN)
-            # phase_payload_size = utils.bstr2int(phase_payload_size_b)
             phase_payload_size = reader.read_bytes(consts.PHASE_PAYLOAD_SIZE_LEN, ret_int=True)
 
             phase_payload = RandomAccessHandler(
@@ -294,8 +283,6 @@ class GenotypePayload(object):
             reader.seek(phase_payload_size, 1)
 
             if param_set.sort_phases_row_flag:
-                # phase_row_ids_payload_size_b = reader.read(consts.ROW_IDS_SIZE_LEN)
-                # phase_row_ids_payload_size = utils.bstr2int(phase_row_ids_payload_size_b)
                 phase_row_ids_payload_size = reader.read_bytes(consts.ROW_IDS_SIZE_LEN, ret_int=True)
 
                 phase_row_ids_payload = RandomAccessHandler(
@@ -306,8 +293,6 @@ class GenotypePayload(object):
                 reader.seek(phase_row_ids_payload_size, 1)
 
             if param_set.sort_phases_col_flag:
-                # phase_col_ids_payload_size_b = reader.read(consts.COL_IDS_SIZE_LEN)
-                # phase_col_ids_payload_size = utils.bstr2int(phase_col_ids_payload_size_b)
                 phase_col_ids_payload_size = reader.read_bytes(consts.COL_IDS_SIZE_LEN, ret_int=True)
                 
                 phase_col_ids_payload = RandomAccessHandler(

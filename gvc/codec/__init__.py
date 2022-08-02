@@ -5,14 +5,12 @@ import numpy as np
 from ..data_structures.consts import CodecID
 from ..data_structures import RowColIds, ParameterSet, VectorAMax
 
-from . import jbigkit #? Import jbigkit
-
 #? If a new codec is added, please update data_structure.consts too
 MAT_CODECS = {
     CodecID.JBIG1 : {
         "name": "jbig",
-        "encoder": jbigkit.encode, #? Add encode function
-        "decoder": jbigkit.decode, #? Add decode function
+        "encoder": None, #? Add encode function
+        "decoder": None, #? Add decode function
     }
 }
 
@@ -34,47 +32,6 @@ def decode_vector(payload):
 def encode_vector(vect):
     payload = VectorAMax(vect).to_bitio().to_bytes(align=True)
     return payload
-
-def decode(
-    bin_mat_payload:bytes, 
-    row_ids_payload:bytes, 
-    col_ids_payload:bytes, 
-    decoder_id:int,
-    unsort=True
-):
-    try:
-        bin_mat_payload = bin_mat_payload.read()
-    except:
-        pass
-
-    decode_f = MAT_CODECS[decoder_id]["decoder"]
-    bin_mat = decode_f(bin_mat_payload, decoder_id)
-    nrows, ncols = bin_mat.shape
-    
-    if row_ids_payload is not None:
-        try:
-            row_ids_payload = row_ids_payload.read()
-        except:
-            pass
-        
-        row_ids = decode_permutation(row_ids_payload, nrows)
-    else:
-        row_ids = None
-    
-    if col_ids_payload:
-        try:
-            col_ids_payload = col_ids_payload.read()
-        except:
-            pass
-
-        col_ids = decode_permutation(col_ids_payload, ncols)
-    else:
-        col_ids = None
-        
-    if unsort:
-        return bin_mat
-    else:
-        return bin_mat, row_ids, col_ids
 
 def encode(
     param_set:ParameterSet,
@@ -175,41 +132,31 @@ def encode(
         row_ids_phase_mat_payload,
         col_idx_phase_mat_payload,
     ]
-    
+
+
 def decode(
     bin_mat_payload:bytes, 
     row_ids_payload:bytes, 
     col_ids_payload:bytes, 
     coder_id:int,
+    unsort=True
 ):
-    """
-
-    Parameters
-    ----------
-    bin_mat_payload : RandomAccessHandler or bytes
-    row_ids_payload : RandomAccessHandler or bytes, 
-    col_ids_payload : RandomAccessHandler or bytes, 
-    coder_id:int
-    Returns
-    -------
-
-    """
     try:
         bin_mat_payload = bin_mat_payload.read()
     except AttributeError:
         pass
 
-    decoder_f = MAT_CODECS[coder_id]['decoder']
-    bin_mat = decoder_f(bin_mat_payload)
+    decode_f = MAT_CODECS[coder_id]["decoder"]
+    bin_mat = decode_f(bin_mat_payload)
     nrows, ncols = bin_mat.shape
-
+    
     if row_ids_payload is not None:
         try:
             row_ids_payload = row_ids_payload.read()
         except AttributeError:
             pass
+        
         row_ids = decode_permutation(row_ids_payload, nrows)
-
     else:
         row_ids = None
 
@@ -220,8 +167,14 @@ def decode(
             pass
 
         col_ids = decode_permutation(col_ids_payload, ncols)
-
     else:
         col_ids = None
-
-    return bin_mat, row_ids, col_ids
+        
+    if unsort:
+        if row_ids is not None:
+            bin_mat = bin_mat[row_ids, :]
+        if col_ids is not None:
+            bin_mat = bin_mat[:, col_ids]
+        return bin_mat
+    else:
+        return bin_mat, row_ids, col_ids

@@ -86,7 +86,7 @@ allele is on the paternal chromosome and which one is on the maternal chromosome
 alleles at the two SNP sites. This suite of “ordered” SNPs then constitutes a haplotype.
 
 Phasing refers to the separation of a consensus sequence into individual sequence strands to identify which variants are
-grouped together or – in phase. In the VCF format, for multiploid data the separator indicates whether the data are
+grouped together or in phase. In the VCF format, for multiploid data the separator indicates whether the data are
 phased (|) or unphased (/).
 
 In the following example the two alleles C and G occur on the same chromosome in the sample named S1::
@@ -168,7 +168,6 @@ def run(args, run_as_module: bool):
             axis=args.axis,
             sort_rows=args.sort_rows,
             sort_cols=args.sort_cols,
-            transpose=args.transpose,
             dist=args.dist,
             solver=args.solver,
             preset_mode=args.preset_mode,

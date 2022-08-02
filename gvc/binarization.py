@@ -9,6 +9,7 @@ import gvc.common
 
 from .data_structures.consts import BinarizationID
 from . import cdebinarize
+from . import debinarize
 
 _phasing_dict = {
     '|' : 0,
@@ -33,7 +34,7 @@ def _int_to_gt_code(val):
     else:
         return "."
 
-def _matrix_to_tensor(matrix, num_matrix):
+def matrix_to_tensor(matrix, num_matrix):
 
     list_matrix = np.split(
         np.expand_dims(matrix, axis=1), 
@@ -148,57 +149,57 @@ def tensor_to_txt(allele_tensor, phasing_tensor):
 
     return lines
 
-def simd_tensor_to_txt(allele_tensor, phasing_tensor):
-    m, n, p = allele_tensor.shape
+# def simd_tensor_to_txt(allele_tensor, phasing_tensor):
+#     m, n, p = allele_tensor.shape
 
-    max_val = allele_tensor.max()
-    avail_allele_vals = '.' + "".join(np.arange(max_val+1).astype(str))
-    avail_phase_val = '|/'
+#     max_val = allele_tensor.max()
+#     avail_allele_vals = '.' + "".join(np.arange(max_val+1).astype(str))
+#     avail_phase_val = '|/'
 
-    if p == 1:
-        codebook = avail_allele_vals
-    elif p > 1:
-        codebook = ["".join(l) for l in it.product(avail_allele_vals, avail_phase_val, repeat=p-1)]
-        codebook = ["".join(l) for l in it.product(codebook, avail_allele_vals)]
+#     if p == 1:
+#         codebook = avail_allele_vals
+#     elif p > 1:
+#         codebook = ["".join(l) for l in it.product(avail_allele_vals, avail_phase_val, repeat=p-1)]
+#         codebook = ["".join(l) for l in it.product(codebook, avail_allele_vals)]
 
-    def_val_idx = 0
-    for k in range(1, p):
-        def_val_idx += len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k)
-        # def_val_idx += 0*len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k-1)
-    def_val_idx += 1
+#     def_val_idx = 0
+#     for k in range(1, p):
+#         def_val_idx += len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k)
+#         # def_val_idx += 0*len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k-1)
+#     def_val_idx += 1
 
-    allele_tensor += 1
+#     allele_tensor += 1
 
-    flag_mask = allele_tensor == -1
-    complete_allele_mask = (np.logical_not(flag_mask)).all(axis=2)
+#     flag_mask = allele_tensor == -1
+#     complete_allele_mask = (np.logical_not(flag_mask)).all(axis=2)
 
-    # gt_matrix_str = np.full((m,n), codebook[def_val_idx])
-    gt_matrix_str = np.empty((m,n), dtype='<U{}'.format(2*p))
+#     # gt_matrix_str = np.full((m,n), codebook[def_val_idx])
+#     gt_matrix_str = np.empty((m,n), dtype='<U{}'.format(2*p))
 
-    index_mat = np.zeros(gt_matrix_str.shape, dtype=np.int)
-    for k in range(1, p):
-        allele_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k)
-        index_mat[complete_allele_mask] += allele_tensor[complete_allele_mask, k-1] * allele_factor
-        phase_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k-1)
-        index_mat[complete_allele_mask] += phasing_tensor[complete_allele_mask, k-1] * phase_factor
+#     index_mat = np.zeros(gt_matrix_str.shape, dtype=np.int)
+#     for k in range(1, p):
+#         allele_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k)
+#         index_mat[complete_allele_mask] += allele_tensor[complete_allele_mask, k-1] * allele_factor
+#         phase_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k-1)
+#         index_mat[complete_allele_mask] += phasing_tensor[complete_allele_mask, k-1] * phase_factor
 
-    index_mat[complete_allele_mask] += allele_tensor[complete_allele_mask, -1]
-    gt_matrix_str[complete_allele_mask] = np.array(codebook)[index_mat[complete_allele_mask]]
+#     index_mat[complete_allele_mask] += allele_tensor[complete_allele_mask, -1]
+#     gt_matrix_str[complete_allele_mask] = np.array(codebook)[index_mat[complete_allele_mask]]
 
-    if (flag_mask).any():
-        for i, j, k in np.argwhere(flag_mask):
-            sample_val = avail_allele_vals[allele_tensor[i, j, 0]]
-            for l in range(1, k):
-                sample_val = avail_allele_vals[allele_tensor[i, j, l]] + avail_phase_val[phasing_tensor[i, j, l-1]]
+#     if (flag_mask).any():
+#         for i, j, k in np.argwhere(flag_mask):
+#             sample_val = avail_allele_vals[allele_tensor[i, j, 0]]
+#             for l in range(1, k):
+#                 sample_val = avail_allele_vals[allele_tensor[i, j, l]] + avail_phase_val[phasing_tensor[i, j, l-1]]
 
-            gt_matrix_str[i, j] = sample_val
+#             gt_matrix_str[i, j] = sample_val
 
-    delim_mat_str = np.full((m,n,1), '\t')
-    delim_mat_str[:, -1] = '\n'
-    gt_matrix_str = np.concatenate((np.expand_dims(gt_matrix_str,2), delim_mat_str), axis=2)
-    gt_matrix_str = _tensor_to_matrix(gt_matrix_str)
+#     delim_mat_str = np.full((m,n,1), '\t')
+#     delim_mat_str[:, -1] = '\n'
+#     gt_matrix_str = np.concatenate((np.expand_dims(gt_matrix_str,2), delim_mat_str), axis=2)
+#     gt_matrix_str = _tensor_to_matrix(gt_matrix_str)
     
-    return "".join(gt_matrix_str.reshape(-1))
+#     return "".join(gt_matrix_str.reshape(-1))
 
 def compare_tensor_to_txt(allele_tensor, phasing_tensor, f):
     m, n, p = allele_tensor.shape
@@ -244,7 +245,7 @@ def compare_tensor_to_txt(allele_tensor, phasing_tensor, f):
 
 def reconstruct_genotype_matrix(allele_matrix, phasing_matrix, p):
 
-    allele_tensor = _matrix_to_tensor(allele_matrix, p)
+    allele_tensor = matrix_to_tensor(allele_matrix, p)
 
     if p >= 1:
         if isinstance(phasing_matrix, int):
@@ -254,7 +255,7 @@ def reconstruct_genotype_matrix(allele_matrix, phasing_matrix, p):
             phasing_tensor[:, :, :] = phasing_matrix
 
         else:
-            phasing_tensor = _matrix_to_tensor(phasing_matrix, p-1)
+            phasing_tensor = matrix_to_tensor(phasing_matrix, p-1)
 
     else:
         log.error('Invalid value p: {}'.format(p))
@@ -538,17 +539,23 @@ def debin_row_bin_split(bin_matrices, bitlen_vect, **kwargs):
     try:
         if isinstance(bin_matrices, List):
             bin_mat = bin_matrices[0]
-        elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 3:
-            bin_mat = bin_matrices[0, :, :]
-        elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 2:
-            bin_mat = bin_matrices
+        elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 1:
+            bin_mat = bin_matrices[0]
+        # elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 3:
+        #     bin_mat = bin_matrices[0, :, :]
+        # elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 2:
+        #     bin_mat = bin_matrices
         else:
             raise TypeError
+        
     except TypeError:
-        log.info("Invalid datat type:{}".format(type(bin_matrices)))
-        raise ValueError
+        error_msg = "Invalid data type:{}".format(type(bin_matrices))
+        log.info(error_msg)
+        raise ValueError(error_msg)
 
-    matrix = cdebinarize.debin_rc_bin_split(bin_mat, bitlen_vect.astype(np.uint8))
+    # TODO: fix cython function debin_rc_bin_split
+    # matrix = cdebinarize.debin_rc_bin_split(bin_mat, bitlen_vect.astype(np.uint8))
+    matrix = debinarize.debin_rc_bin_split(bin_mat, bitlen_vect.astype(np.uint8))
 
     return matrix
 
@@ -638,6 +645,12 @@ def gt_val_to_gt_char(v):
     else:
         return v+48
 
+def recon_gt_mat_using_phasing_mat(
+    allele_mat,
+    phasing_mat,
+    p
+):
+    pass
 
 def reconstruct_genotype_matrix_using_phase_value(
     allele_mat, 
@@ -664,10 +677,7 @@ def reconstruct_genotype_matrix_using_phase_value(
     if phase_val == 0:
         phase_char = 124 # '|'
 
-    # gt_mat[0] = <char *> malloc((gt_mat_len + 1) * sizeof(char))
     gt_mat = [bytearray(b'\0' * gt_mat_len)]
-    # if not gt_mat[0]:
-    #     raise MemoryError()
 
     for i_variant in range(n_variants):
 

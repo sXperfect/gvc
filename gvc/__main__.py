@@ -23,6 +23,8 @@ encoder_help = 'Entropy codec'
 parser = argparse.ArgumentParser(description=gvc.settings.PROGRAM_DESC, prog=gvc.settings.PROGRAM_NAME)
 parser.add_argument('-l', '--log_level', help='log level', choices=LOG_LEVELS.keys(), default='info')
 subparsers = parser.add_subparsers(dest='mode')
+# parser.add_argument('input', metavar='input_file_path', help='input file path')
+# parser.add_argument('output', metavar='output_file_path', help='output file path', nargs='?')
 
 #? Encode
 enc_parser = subparsers.add_parser('encode')
@@ -39,15 +41,15 @@ enc_parser.add_argument('--dist', help='Distance to compute cost matrix', choice
 enc_parser.add_argument('--solver', help='Traveling Salesman Problem solver', choices=AVAIL_SOLVERS, default='nn')
 enc_parser.add_argument('--preset-mode', type=int, choices=[0, 1, 2], default=0, help=preset_mode_help)
 enc_parser.add_argument('--encoder', choices=AVAIL_CODECS, default='jbig', help=encoder_help)
-enc_parser.add_argument('input', metavar='input_file_path', help='input file path')
-enc_parser.add_argument('output', metavar='output_file_path', help='output file path')
+enc_parser.add_argument('input', metavar='input_file_path', help='Input file path.')
+enc_parser.add_argument('output', metavar='output_file_path', help='Output file path.')
 
 #? Decode
 dec_parser = subparsers.add_parser('decode')
-dec_parser.add_argument('input', metavar='input_file_path', help='input file path')
-dec_parser.add_argument('output', metavar='output_file_path', help='output file path')
 dec_parser.add_argument('--pos', type=int, help='The start and end position of genomic variants to be decoded.', nargs=2)
-dec_parser.add_argument('--samples', type=str, help='List of samples to be decoded. Default: all samples', nargs='+')
+dec_parser.add_argument('--samples', type=str, help='A semicolon separated list of samples to be decoded. Default: all samples.')
+dec_parser.add_argument('input', metavar='input_file_path', help='Input file path.')
+dec_parser.add_argument('output', metavar='output_file_path', help='Output file path.', nargs='?')
 
 # #? Random Access
 # ra_parser = subparsers.add_parser('random-access')

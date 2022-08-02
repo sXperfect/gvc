@@ -26,21 +26,34 @@ class MetaHandler(object):
         self.mkdir_root()
         self.write_header()
         self.min_max_pos_list = []
+
+    @property
+    def header_fpath(self):
+        return join(self.metadata_dpath, 'header.txt')
+    
+    @property
+    def is_enabled(self):
+        return self.metadata_dpath is not None
     
     def mkdir_root(self):
+        if not self.is_enabled:
+            return
+        
         if exists(self.metadata_dpath):
             rmtree(self.metadata_dpath)
         
         makedirs(self.metadata_dpath)
         
-    @property
-    def header_fpath(self):
-        return join(self.metadata_dpath, 'header.txt')
-    
     def init_block(self):
+        if not self.is_enabled:
+            return
+        
         self.pos_arr = np.empty(self.block_size, np.uint64)
     
     def write_header(self):
+        if not self.is_enabled:
+            return
+        
         with open(self.header_fpath, 'w') as f:
             f.write(self.vcf_f.raw_header.strip())
             
@@ -51,9 +64,15 @@ class MetaHandler(object):
         )
         
     def proc_var(self, i_var, variant):
+        if not self.is_enabled:
+            return
+        
         self.pos_arr[i_var] = variant.POS
         
     def proc_block(self, block_id, n_vars=None):
+        if not self.is_enabled:
+            return
+        
         min_max_pos = np.array([self.pos_arr.min(), self.pos_arr.max()], dtype=np.uint64)
         self.min_max_pos_list.append(min_max_pos)
             
@@ -69,6 +88,9 @@ class MetaHandler(object):
             )
             
     def end(self):
+        if not self.is_enabled:
+            return
+        
         np.save(
             join(self.metadata_dpath, "main"),
             np.stack(self.min_max_pos_list)
@@ -91,7 +113,10 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
     vcf_f = VCF(fpath, strict_gt=True, gts012=True, threads=2)
     num_samples = len(vcf_f.samples)
     
-    metadata_dpath = join(f'{out_fpath}.metadata')
+    if out_fpath is not None:
+        metadata_dpath = join(f'{out_fpath}.metadata')
+    else:
+        metadata_dpath = None #? Disable metadata handler
     
     meta_handler = MetaHandler(vcf_f, metadata_dpath, block_size)
     meta_handler.init()
@@ -106,7 +131,7 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
         p = variant.ploidy
 
         if i_var == 0:
-            #TODO: is int8 as the datatype correct? genotypes is int16
+            #TODO: is int8 as the data type of allele_matrix sufficient? genotypes is int16
             allele_matrix = np.empty((block_size, num_samples, p), dtype=gvc.common.SIGNED_ALLELE_DTYPE) 
             phase_matrix = np.empty((block_size, num_samples, (p-1)), dtype=bool)
             meta_handler.init_block()
@@ -148,6 +173,9 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
 
     vcf_f.close()
 
+    if i_var == 0:
+        return
+    
     suballele_matrix, missing_rep_val, na_rep_val = gvc.binarization.adaptive_max_value(allele_matrix[:i_var, :])
     subphase_matrix = phase_matrix[:i_var, :]
     

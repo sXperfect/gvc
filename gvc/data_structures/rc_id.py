@@ -3,8 +3,46 @@ import typing as t
 import numpy as np
 from . import consts
 from ..bitstream import BitIO
-from .. import libds
+# from ..common import PERMUTATION_DTYPE
+# from .. import libds
+# from .crc_id import decode_rowcolids
+from . import crc_id
+import math
 
+def decode_rowcolids(
+    data,
+    num_entries
+):
+
+    ids = np.zeros(num_entries, dtype=np.uint16)
+    decode_rowcolids_loop(data, ids, num_entries)
+
+    return ids
+
+def decode_rowcolids_loop(
+    data,
+    ids,
+    num_entries
+):
+
+    i_byte = 0
+    buffer = 0
+    buffer_nbits = 0
+    bits_per_id = math.ceil(math.log2(num_entries))
+
+    for i_entry in range(num_entries):        
+        while buffer_nbits < bits_per_id:
+            buffer <<= 8
+            buffer |= data[i_byte]
+            
+            i_byte += 1
+            buffer_nbits += 8
+            
+        buffer_nbits = buffer_nbits-bits_per_id
+        ids[i_entry] = (buffer >> buffer_nbits)
+        mask = (1 << buffer_nbits) - 1
+        buffer = buffer & mask
+        
 class RowColIds(object):
     def __init__(self, ids):
         self.ids = ids
@@ -24,24 +62,15 @@ class RowColIds(object):
         return self.to_bitio().to_bytes(align=True)
 
     @classmethod
-    def from_bytes(cls, data:bytes, num_ids):
-        # data_bytes = io.BytesIO(data)
-        # istream = gvc.bitstream.BitstreamReader(data_bytes)
+    def from_bytes(cls, data:bytes, num_entries):
 
-        # bits_per_id = np.ceil(np.log2(num_ids)).astype(int)
-
-        # ids = np.zeros((num_ids),dtype=int)
-        # for i_entry in range(num_ids):
-        #     ids[i_entry] = istream.read_bits(bits_per_id)
-
-        # return cls(ids)
-
-        return cls(
-            libds.decode_rowcolids(
-                data, num_ids
-            )
-        )
-
+        ids = decode_rowcolids(np.frombuffer(data, dtype=np.uint8), num_entries)
+        # TODO: Fix and use the cython function
+        # data = np.array(np.frombuffer(data, dtype=np.uint8))
+        # ids = crc_id.decode_rowcolids(data, num_entries)
+        
+        return cls(ids)
+    
     @classmethod
     def from_randomaccesshandler(cls, ra_handler, num_ids):
         return cls.from_bytes(ra_handler.read(), num_ids)

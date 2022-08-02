@@ -1,4 +1,5 @@
 from os.path import join
+import typing as t
 from random import sample
 import numpy as np
 
@@ -89,16 +90,27 @@ class Index():
 
         return slice(start_row, end_row, None)
     
-    def query_columns(self, sample_ids):
+    def query_columns(self, 
+        sample_ids:str
+    ):
+        """Transform list of sample ids to column indices of the original file.
+
+        Args:
+            sample_ids (t.List): _description_
+
+        Returns:
+            (None, List[np.uint32]): Return None if sample_ids is none, otherwise a list of column indices
+        """
         
         if sample_ids is None:
             return None
         
         else:            
-            try:
-                sample_ids = np.array(sample_ids.strip().split(","))
-            except:
-                pass
+            sample_ids = np.array(sample_ids.strip().split(";"))
+            
+            #? Handle special case where only one sample is given
+            if sample_ids.ndim == 0:
+                sample_ids = np.expand_dims(sample_ids, 0)
             
             search_f = np.vectorize(lambda x: np.argmax(x == self.samples))
             col_ids = search_f(sample_ids).astype(np.uint32)

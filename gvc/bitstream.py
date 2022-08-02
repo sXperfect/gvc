@@ -119,10 +119,6 @@ class BitstreamReader(object):
         for __ in range(n):
             v = (v << 1) | self._read_bit()
         return v
-
-    # #TODO: Faster read_byte
-    # def read_bytes(self, n):
-    #     return self.read_bits(n*8)
     
     def read_bytes(self, n, ret_int=False):
         assert self._byte_aligned()

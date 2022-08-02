@@ -12,6 +12,7 @@ ALLELE_DTYPE = np.uint8
 PHASING_DTYPE = np.bool
 MAX_VAL_DTYPE = ALLELE_DTYPE
 BIN_DTYPE = np.bool
+PERMUTATION_DTYPE = np.uint16
 
 def create_parameter_set(
     missing_rep_val, 

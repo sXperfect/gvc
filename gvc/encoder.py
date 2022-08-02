@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import typing as t
 import copy as cp
 import logging as log
 import multiprocessing as mp
@@ -10,7 +11,12 @@ from .binarization import binarize_allele_matrix, BINARIZATION_STR2ID
 from .sort import sort
 from .codec import CODEC_STR2ID, encode
 
-def run_core(raw_block, ps_params, tsp_params):  
+def run_core(
+    raw_block:t.List, 
+    ps_params:t.List,
+    tsp_params:t.List
+):
+    
     allele_matrix, phasing_matrix, p, missing_rep_val, na_rep_val = raw_block
     binarization_id,codec_id,axis,sort_rows,sort_cols,transpose = ps_params
     dist_f_name, solver_name, solver_profile = tsp_params
@@ -204,7 +210,7 @@ class Encoder(object):
         transpose=False,
         block_size=2536,
         max_cols=None,
-        dist='hrl',
+        dist='ham',
         solver='nn',
         codec_name:str="jbig1",
         preset_mode=1,
