@@ -6,7 +6,7 @@ from ..bitstream import BitIO
 # from ..common import PERMUTATION_DTYPE
 # from .. import libds
 # from .crc_id import decode_rowcolids
-from . import crc_id
+# from . import crc_id
 import math
 
 def decode_rowcolids(
