@@ -1,12 +1,7 @@
 import logging as log
 import typing as t
 import numpy as np
-from . import consts
 from ..bitstream import BitIO
-# from ..common import PERMUTATION_DTYPE
-# from .. import libds
-# from .crc_id import decode_rowcolids
-# from . import crc_id
 import math
 
 def decode_rowcolids(
@@ -64,8 +59,8 @@ class RowColIds(object):
     @classmethod
     def from_bytes(cls, data:bytes, num_entries):
 
+        # TODO: Improve by using the cython function
         ids = decode_rowcolids(np.frombuffer(data, dtype=np.uint8), num_entries)
-        # TODO: Fix and use the cython function
         # data = np.array(np.frombuffer(data, dtype=np.uint8))
         # ids = crc_id.decode_rowcolids(data, num_entries)
         
