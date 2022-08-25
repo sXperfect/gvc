@@ -18,6 +18,8 @@ We kindly ask to refrain from publishing analyses that were conducted using this
 
 ## Dependencies
 ---
+
+Both python version 3.7 or newer and python virtual environment are required.
 See [requirements.txt](requirements.txt)
 <!-- * Python>=3.6
 * virtualenv
@@ -48,35 +50,35 @@ The newly created python virtual environment will be located in `tmp/venv`.
 
 In order to encode or decode the payloads based on JBIG codec, an external executable is required.
 You can use any of the existing and publicly available JBIG codec implementation.
-We provide an example on how to integrate JBIG-based codec [here](JBIG).
+We provide an example on how to integrate JBIG-based codec [here](JBIG.md).
 
 Generic compressors, such as LZMA or BZIP2, are supported.
-Please refer to this [documentation](CODEC) for integration.
+Please refer to this [documentation](CODEC.md) for integration.
 
 ## Usage
 ---
 Compress a VCF file with default options (an example VCF file can be found in the `tests` folder): 
 ```
-gvc encode variant_calls.vcf compressed_genotypes.gvc
+python3 -m gvc encode variant_calls.vcf compressed_genotypes.gvc
 ```
 
 A list of options can be obtained via:
 ```
-gvc encode --help
+python3 -m gvc encode --help
 ```
 
 Decode a compressed VCF file with default options: 
 ```
-gvc decode compressed_genotypes.gvc decoded_genotypes.txt
+python3 -m gvc decode compressed_genotypes.gvc decoded_genotypes.txt
 ```
 
 A list of options can be obtained via:
 ```
-gvc decode --help
+python3 -m gvc decode --help
 ```
 
-For random access to a subset of compressed genotypes, additional options must be passed to the `gvc decode` command:
+For random access to a subset of compressed genotypes, additional options must be passed to the `python3 -m gvc decode` command:
 
 ```
-gvc decode --pos 1 10 --sample SAMPLE01 compressed_genotypes.gvc decoded_genotypes.txt
+python3 -m gvc decode --pos 1 10 --sample SAMPLE01 compressed_genotypes.gvc decoded_genotypes.txt
 ```
