@@ -2,7 +2,7 @@ import logging as log
 import typing as t
 import numpy as np
 
-from ..data_structures.consts import CodecID
+from ..data_structures.consts import CodecID, BinarizationID
 from ..data_structures import RowColIds, ParameterSet, VectorAMax
 
 #? If a new codec is added, please update data_structure.consts too
@@ -98,9 +98,9 @@ def encode(
 
         col_idx_allele_mat_payloads.append(col_ids_payload)
         
-    if param_set.binarization_id in (0, 3):
+    if param_set.binarization_id in [BinarizationID.BIT_PLANE]:
         variants_amax_payload = None
-    elif param_set.binarization_id in (1,2):
+    elif param_set.binarization_id in [BinarizationID.ROW_BIN_SPLIT]:
         variants_amax_payload = encode_vector(additional_info)
     else:
         raise ValueError('Invalid binarization flag')

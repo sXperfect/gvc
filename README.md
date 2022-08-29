@@ -19,7 +19,7 @@ We kindly ask to refrain from publishing analyses that were conducted using this
 
 Both python version 3.7 or newer and python virtual environment are required.
 See [requirements.txt](requirements.txt) for the list of required python libraries.
-For python version 3.6 or lower, a python package `dataclass` must be installed.
+For python version 3.6 or lower, an additional python package `dataclass` is required.
 
 ## Building
 ---
@@ -32,8 +32,7 @@ Run setup script `setup.sh`
 
     bash setup.sh
 
-This will create automaticaly a virtual environment with all dependencies installed.
-The newly created python virtual environment will be located in `tmp/venv`.
+This will create automaticaly a virtual environment with all dependencies installed located in `tmp/venv`.
 
 ### Entropy Codec
 ---

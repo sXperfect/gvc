@@ -21,14 +21,14 @@ preset_mode_help = 'Preset mode of the traveling salesman problem solver'
 encoder_help = 'Entropy codec'
 
 parser = argparse.ArgumentParser(description=gvc.settings.PROGRAM_DESC, prog=gvc.settings.PROGRAM_NAME)
-parser.add_argument('-l', '--log_level', help='log level', choices=LOG_LEVELS.keys(), default='info')
+parser.add_argument('-l', '--log_level', help='log level', choices=LOG_LEVELS.keys(), default='error')
 subparsers = parser.add_subparsers(dest='mode')
 # parser.add_argument('input', metavar='input_file_path', help='input file path')
 # parser.add_argument('output', metavar='output_file_path', help='output file path', nargs='?')
 
 #? Encode
 enc_parser = subparsers.add_parser('encode')
-enc_parser.add_argument('-l', '--log_level', help='log level', choices=LOG_LEVELS.keys(), default='info')
+# enc_parser.add_argument('-l', '--log_level', help='log level', choices=LOG_LEVELS.keys(), default='error')
 # enc_parser.add_argument('-c', '--compare', help='compare', action='store_true')
 enc_parser.add_argument('-j', '--num-threads', help=num_threads_help, type=int, default=0)
 enc_parser.add_argument('-b', '--block_size', help=block_size_help, type=int, default=1024)

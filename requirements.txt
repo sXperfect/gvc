@@ -1,9 +1,8 @@
 # 1.18-1.23
-numpy==1.22.4
-# numpy==1.21
-# cython>=0.23.3
+# numpy==1.22.4
+numpy==1.21
 cython==0.29.30
-numba==0.55.2
+numba
 cyvcf2
 scipy
 tspsolve
