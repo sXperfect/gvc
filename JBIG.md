@@ -8,8 +8,10 @@ First, create a folder called `third_party`, then download and extract JBIG-KIT 
 Compile the JBIG-KIT source code to produce executables for both encoding and decoding process.
 Here we use `pbmtojbg85` for the encoding process and `jbgtopbm85` for the decoding proceses.
 
-The next step is to create a new file that contains both encode and decode functions.
-We call this file `jbigkit.py` and the content should looks like this:
+The next step is to create a new file `jbigkit.py` that contains both encode and decode functions.
+Both functions should specify all necessary flags. 
+The file shall be located in `gvc/codec` folder. 
+The content should looks like this:
 
 ```python
 import os
@@ -54,6 +56,8 @@ def encode(
         The JBIG1 bytestream.
 
     """
+
+    # Initialize temporary directory
     with tmp.TemporaryDirectory(prefix='PBM2JBG_') as dpath:
         
         pbm_fpath = os.path.join(dpath, 'tmp.pbm')
@@ -66,6 +70,7 @@ def encode(
         flags = JBG_TPBON
         l0 = (1<<32)-1
 
+        # Encoder parameters
         args = [
             "-p", str(flags),
             "-s", str(l0)
@@ -77,6 +82,7 @@ def encode(
             log.error(proc.stderr)
             raise RuntimeError(proc.stderr.decode("UTF-8"))
 
+        # Load JBIG payload
         with open(jbg_fpath, 'rb') as jbig_f:
             jbig_payload = jbig_f.read()
 
@@ -100,15 +106,18 @@ def decode(
         The binary matrix
     """
 
+    # Initialize temporary directory
     with tmp.TemporaryDirectory(prefix='JBG2PBM_') as dpath:
         jbg_fpath = os.path.join(dpath, 'tmp.jbg')
         pbm_fpath = os.path.join(dpath, 'tmp.pbm')
 
+        # Store JBIG payload
         with open(jbg_fpath, 'wb') as jbig1_f:
             jbig1_f.write(jbig_payload)
 
         __, ncols = get_shape(jbig_payload[:12])
 
+        # Decoder parameters
         args = [
             "-x", str(ncols),
             "-B", str(2**30),
@@ -120,12 +129,13 @@ def decode(
             log.error(proc.stderr)
             raise RuntimeError(proc.stderr.decode("UTF-8"))
 
+        # Load matrix (pbm image)
         pbm_im = Image.open(pbm_fpath)
+        mat = np.asarray(pbm_im)
 
-    return np.asarray(pbm_im)
+    return mat
 ```
-The file is then stored in `gvc/codec` folder. 
-Both functions should specify all necessary flags. 
+
 Internally, GVC does not extract the header or the parameters of the payload, thus JBIG parameters are independent from GVC.
 
 We then register the encode and decode functions in `__init__.py` file located in `gvc/codec`:
@@ -145,4 +155,3 @@ MAT_CODECS = {
 ```
 
 Now JBIG is ready to use.
-

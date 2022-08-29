@@ -2,8 +2,6 @@
 
 Open Source Genotype Compressor
 
-
-
 ## Usage policy
 ---
 
@@ -20,16 +18,8 @@ We kindly ask to refrain from publishing analyses that were conducted using this
 ---
 
 Both python version 3.7 or newer and python virtual environment are required.
-See [requirements.txt](requirements.txt)
-<!-- * Python>=3.6
-* virtualenv
-* numpy
-* cython
-* numba
-* cyvcf2
-* scipy
-* tspsolve
-* Pillow -->
+See [requirements.txt](requirements.txt) for the list of required python libraries.
+For python version 3.6 or lower, a python package `dataclass` must be installed.
 
 ## Building
 ---
@@ -56,6 +46,11 @@ Generic compressors, such as LZMA or BZIP2, are supported.
 Please refer to this [documentation](CODEC.md) for integration.
 
 ## Usage
+
+In order to use GVC, you should activate the virtual environment first.
+To activate the environment, we can use the following command in the root folder: `source tmp/env/bin/activate`.
+Alternatively, you can replace `python3` in the following commands with `tmp/venv/bin/python3`.
+
 ---
 Compress a VCF file with default options (an example VCF file can be found in the `tests` folder): 
 ```

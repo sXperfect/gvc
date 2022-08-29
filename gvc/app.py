@@ -177,6 +177,9 @@ def run(args, run_as_module: bool):
         )
         
         encoder.run()
+    
+    elif args.mode is None:
+        raise RuntimeError("Please enter the mode.")
         
     else:
         raise NotImplementedError("Mode is not available:{}".format(args.mode))

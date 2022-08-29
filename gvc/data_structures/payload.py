@@ -193,10 +193,10 @@ class GenotypePayload(object):
                 payload += self.phase_col_ids_payload
                 
         if self.missing_rep_val is not None:
-            payload += utils.int2bstr(len(self.missing_rep_val), consts.MISSING_REP_VAL_LEN)
+            payload += utils.int2bstr(self.missing_rep_val, consts.MISSING_REP_VAL_LEN)
 
         if self.na_rep_val is not None:
-            payload += utils.int2bstr(len(self.na_rep_val), consts.NA_REP_VAL_LEN)
+            payload += utils.int2bstr(self.na_rep_val, consts.NA_REP_VAL_LEN)
 
         return payload
 
