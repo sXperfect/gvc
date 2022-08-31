@@ -17,7 +17,7 @@ We kindly ask to refrain from publishing analyses that were conducted using this
 ## Dependencies
 ---
 
-Both python version 3.7 or newer and python virtual environment are required.
+Both python version 3.8 or newer and CMAKE are required.
 See [requirements.txt](requirements.txt) for the list of required python libraries.
 <!-- For python version 3.6 or lower, an additional python package `dataclass` is required. -->
 
