@@ -19,7 +19,7 @@ We kindly ask to refrain from publishing analyses that were conducted using this
 
 Both python version 3.7 or newer and python virtual environment are required.
 See [requirements.txt](requirements.txt) for the list of required python libraries.
-For python version 3.6 or lower, an additional python package `dataclass` is required.
+<!-- For python version 3.6 or lower, an additional python package `dataclass` is required. -->
 
 ## Building
 ---
@@ -32,7 +32,9 @@ Run setup script `setup.sh`
 
     bash setup.sh
 
-This will create automaticaly a virtual environment with all dependencies installed located in `tmp/venv`.
+This step will install and compile all dependencies automatically.
+<!-- This will create automaticaly a virtual environment with all dependencies installed located in `tmp/venv`.
+If you use conda environment, you can install all dependencies with command `python3 -m pip install -r requirements.txt`. -->
 
 ### Entropy Codec
 ---
@@ -46,9 +48,10 @@ Please refer to this [documentation](CODEC.md) for integration.
 
 ## Usage
 
-In order to use GVC, you should activate the virtual environment first.
+<!-- In order to use GVC, you should activate the virtual environment first.
 To activate the environment, we can use the following command in the root folder: `source tmp/env/bin/activate`.
-Alternatively, you can replace `python3` in the following commands with `tmp/venv/bin/python3`.
+Alternatively, you can replace `python3` in the following commands with `tmp/venv/bin/python3`. -->
+<!-- If you install the dependencies manually, you do not have to activate the environment. -->
 
 ---
 Compress a VCF file with default options (an example VCF file can be found in the `tests` folder): 

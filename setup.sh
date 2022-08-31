@@ -18,11 +18,13 @@ else
 fi
 
 # Prepare python
-readonly venv_dir="${git_root_dir}/tmp/venv"
-readonly python_bin="${venv_dir}/bin/python"
+# readonly venv_dir="${git_root_dir}/tmp/venv"
+# readonly python_bin="${venv_dir}/bin/python"
+readonly python_bin="python3"
 {
     cd ${git_root_dir}
-    virtualenv -p python3 ${venv_dir}
+    # # virtualenv -p python3 ${venv_dir}
+    # python3 -m virtualenv ${venv_dir}
     ${python_bin} -m pip install -r requirements.txt
     ${python_bin} setup.py build_ext --inplace
 }
