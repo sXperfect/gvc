@@ -151,7 +151,7 @@ def run(args, run_as_module: bool):
     if args.mode == "decode":
         if args.pos is None and args.samples is None:
             decoder = Decoder(args.input, args.output)
-            decoder.decode_all()
+            decoder.decode()
             
         else:
             decoder = Decoder(args.input, args.output)
@@ -159,6 +159,9 @@ def run(args, run_as_module: bool):
                 args.pos,
                 args.samples
             )
+            
+    elif args.mode == "compare":
+        raise NotImplementedError()
 
     elif args.mode == "encode":
         encoder = Encoder(

@@ -304,33 +304,33 @@ def decode_encoded_variants(
 #         # return gt_mat
 #         return allele_matrix, phase_val
 
-def _decode_block_payload(param_set, block: ds.Block):
-    log.info('decoding block payload')
+# def _decode_block_payload(param_set, block: ds.Block):
+#     log.info('decoding block payload')
 
-    if block.block_header.content_id == consts.ContentID.GENOTYPE:
-        log.info('Decoding EncodedVariants')
+#     if block.block_header.content_id == consts.ContentID.GENOTYPE:
+#         log.info('Decoding EncodedVariants')
 
-        decode_encoded_variants(param_set, block.block_payload)
+#         decode_encoded_variants(param_set, block.block_payload, ret_gt=True)
 
-    else:
-        error_msg = 'Invalid content id: {}'.format(block.block_header.content_id)
-        log.error(error_msg)
-        raise gvc.errors.GvcError(error_msg)
+#     else:
+#         error_msg = 'Invalid content id: {}'.format(block.block_header.content_id)
+#         log.error(error_msg)
+#         raise gvc.errors.GvcError(error_msg)
 
 
-def _decode_access_unit(decoder_context):
-    log.info('Decoding access unit')
+# def _decode_access_unit(decoder_context):
+#     log.info('Decoding access unit')
 
-    allele_tensors = []
-    phasing_tensors = []
-    for i, block in enumerate(decoder_context.curr_access_unit.blocks):
-        log.info('Decoding block {}'.format(i))
-        allele_tensor, phasing_tensor = _decode_block_payload(decoder_context.curr_parameter_set, block)
+#     allele_tensors = []
+#     phasing_tensors = []
+#     for i, block in enumerate(decoder_context.curr_access_unit.blocks):
+#         log.info('Decoding block {}'.format(i))
+#         allele_tensor, phasing_tensor = _decode_block_payload(decoder_context.curr_parameter_set, block)
 
-        allele_tensors.append(allele_tensor)
-        phasing_tensors.append(phasing_tensor)
+#         allele_tensors.append(allele_tensor)
+#         phasing_tensors.append(phasing_tensor)
 
-    return np.concatenate(allele_tensors, axis=0), np.concatenate(phasing_tensors, axis=0)
+#     return np.concatenate(allele_tensors, axis=0), np.concatenate(phasing_tensors, axis=0)
 
 # def _decode_and_write_access_unit(out_f, decoder_context):
 #     log.info('Decoding access unit')
@@ -403,7 +403,7 @@ def _get_tensor_shape(
     nrows, ncols = shapes[0]
     for shape in shapes[1:]:
         assert nrows == shape[0]
-        assert nrows == shape[1]
+        assert ncols == shape[1]
 
     if param_set.binarization_id == consts.BinarizationID.BIT_PLANE:
 
@@ -571,7 +571,7 @@ class Decoder(object):
     def num_decoded_data_units(self):
         return self.num_access_units + self.num_parameter_sets
 
-    def decode_all(self):
+    def decode(self):
         for i_access_unit in range(self.num_access_units):
             self.decoder_context.set_access_unit(i_access_unit)
             
