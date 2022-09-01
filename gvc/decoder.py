@@ -14,8 +14,9 @@ from . import binarization
 from . import codec
 from .codec import jbig
 from . import debinarize
-from . import cdebinarize
+# from . import cdebinarize
 from . import cquery
+from .reader import vcf_genotypes_reader
 
 # def _decode_encoded_variants(
 #     param_set:ds.ParameterSet,
@@ -631,7 +632,57 @@ class Decoder(object):
         #? No block found given POSs
         else:
             return None
+        
+    def compare(self,
+        orig_fpath
+    ):
+        
+        block_size = None
+        for i_access_unit in range(self.num_access_units):
+            self.decoder_context.set_access_unit(i_access_unit)
+            
+            for i_block, block in enumerate(self.decoder_context.curr_access_unit.blocks):
+                log.info('Decoding block {}'.format(i_block))
 
+                with utils.catchtime() as t:
+                    recon_allele_matrix, recon_phasing_mat = decode_encoded_variants(
+                        self.decoder_context.curr_parameter_set,
+                        block.block_payload,
+                        ret_gt=False
+                    )
+
+                log.info("Decoding time:{:.3f}".format(t.time))
+        
+                if block_size is None:
+                    #? Initialize VCF Reader
+                    block_size = recon_allele_matrix.shape[0]
+                    reader = vcf_genotypes_reader(orig_fpath, None, block_size)
+                    reader_it = iter(reader)
+                    
+                allele_matrix, phasing_matrix, p, missing_rep_val, na_rep_val = next(reader_it)
+                allele_matrix = binarization.undo_adaptive_max_value(
+                    allele_matrix, missing_rep_val, na_rep_val,
+                )
+                
+                #? Compare
+                assert np.array_equal(allele_matrix, recon_allele_matrix), "[AC:{} BLK:{}] Allele matrix differ".format(i_access_unit, i_block)
+
+                #? Handle phasing value. If the phasing matrix is uniform, take a single value for the comparison
+                if np.all(phasing_matrix == 0) or np.all(phasing_matrix == 1):
+                    phasing_val = phasing_matrix[0][0]
+                    assert phasing_val == recon_phasing_mat, "[AC:{} BLK:{}] Phasing value differ".format(i_access_unit, i_block)
+                else:
+                    assert np.array_equal(phasing_matrix, recon_phasing_mat)
+                    
+                log.info("AC:{} BLK:{} is correct!".format(i_access_unit, i_block))
+                
+        try:
+            next(reader_it)
+            raise ValueError("There are more data in the original vcf file than the encoded one!")
+        except StopIteration:
+            log.info("Comparison is complete")
+                    
+                
 
 
 

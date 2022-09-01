@@ -161,7 +161,8 @@ def run(args, run_as_module: bool):
             )
             
     elif args.mode == "compare":
-        raise NotImplementedError()
+        decoder = Decoder(args.input, None)
+        decoder.compare(args.output)
 
     elif args.mode == "encode":
         encoder = Encoder(
