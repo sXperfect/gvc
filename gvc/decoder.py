@@ -99,10 +99,10 @@ def decode_encoded_variants(
     bin_matrices = np.empty(param_set.num_variants_flags, dtype=object)
     for i_bin_mat in range(param_set.num_variants_flags):
         bin_mat = codec.decode(
-            encoded_variants.variants_payloads[0],
-            encoded_variants.variants_row_ids_payloads[0],
-            encoded_variants.variants_col_ids_payloads[0],
-            param_set.variants_coder_ids[0],
+            encoded_variants.variants_payloads[i_bin_mat],
+            encoded_variants.variants_row_ids_payloads[i_bin_mat],
+            encoded_variants.variants_col_ids_payloads[i_bin_mat],
+            param_set.variants_coder_ids[i_bin_mat],
             unsort=True
         )
         
