@@ -642,7 +642,7 @@ class Decoder(object):
             self.decoder_context.set_access_unit(i_access_unit)
             
             for i_block, block in enumerate(self.decoder_context.curr_access_unit.blocks):
-                log.info('Decoding block {}'.format(i_block))
+                log.info('Comparing content from AC:{} BLK:{}'.format(i_access_unit, i_block))
 
                 with utils.catchtime() as t:
                     recon_allele_matrix, recon_phasing_mat = decode_encoded_variants(
@@ -665,26 +665,19 @@ class Decoder(object):
                 )
                 
                 #? Compare
-                assert np.array_equal(allele_matrix, recon_allele_matrix), "[AC:{} BLK:{}] Allele matrix differ".format(i_access_unit, i_block)
+                assert np.array_equal(allele_matrix, recon_allele_matrix), "Allele matrix differ".format(i_access_unit, i_block)
 
                 #? Handle phasing value. If the phasing matrix is uniform, take a single value for the comparison
                 if np.all(phasing_matrix == 0) or np.all(phasing_matrix == 1):
                     phasing_val = phasing_matrix[0][0]
-                    assert phasing_val == recon_phasing_mat, "[AC:{} BLK:{}] Phasing value differ".format(i_access_unit, i_block)
+                    assert phasing_val == recon_phasing_mat, "Phasing value differ".format(i_access_unit, i_block)
                 else:
                     assert np.array_equal(phasing_matrix, recon_phasing_mat)
                     
-                log.info("AC:{} BLK:{} is correct!".format(i_access_unit, i_block))
+                log.info("Contents match!".format(i_access_unit, i_block))
                 
         try:
             next(reader_it)
             raise ValueError("There are more data in the original vcf file than the encoded one!")
         except StopIteration:
             log.info("Comparison is complete")
-                    
-                
-
-
-
-
-
