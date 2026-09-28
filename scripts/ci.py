@@ -6,10 +6,12 @@ from __future__ import print_function
 import argparse
 import compileall
 import importlib.metadata as metadata
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -17,6 +19,8 @@ PYPROJECT = ROOT / "pyproject.toml"
 VERSION_FILE = ROOT / "gvc" / "_version.py"
 CMAKE_SOURCE = ROOT / "library" / "libgvc" / "src"
 CMAKE_BUILD = ROOT / "tmp" / "libgvc-build"
+DIST_DIR = ROOT / "tmp" / "dist"
+PACKAGE_VENV_ROOT = ROOT / "tmp" / "package-venvs"
 
 DEPENDENCIES = (
     "numpy",
@@ -26,6 +30,7 @@ DEPENDENCIES = (
     "cyvcf2",
     "numba",
     "Pillow",
+    "build",
 )
 
 
@@ -108,6 +113,107 @@ def optional_gate():
     return run([sys.executable, "-c", code])
 
 
+
+def _venv_python(venv_dir):
+    if os.name == "nt":
+        return venv_dir / "Scripts" / "python.exe"
+    return venv_dir / "bin" / "python"
+
+
+def _run_external(cmd, cwd, env=None):
+    print("$ " + " ".join(str(x) for x in cmd), flush=True)
+    return subprocess.call(
+        [str(x) for x in cmd],
+        cwd=str(cwd),
+        env=env,
+    )
+
+
+def _install_and_smoke_artifact(artifact, name):
+    venv_dir = PACKAGE_VENV_ROOT / name
+    if venv_dir.exists():
+        shutil.rmtree(str(venv_dir))
+    status = run([sys.executable, "-m", "venv", str(venv_dir)])
+    if status:
+        return status
+
+    py = _venv_python(venv_dir)
+    env = dict(os.environ)
+    if sys.version_info[:2] == (3, 8):
+        env["PIP_CONSTRAINT"] = str(ROOT / "ci" / "constraints" / "py38-latest.txt")
+
+    pip_spec = "pip<25.1" if sys.version_info[:2] == (3, 8) else "pip"
+    status = _run_external(
+        [py, "-m", "pip", "install", "--upgrade", pip_spec],
+        cwd=venv_dir,
+        env=env,
+    )
+    if status:
+        return status
+
+    status = _run_external(
+        [py, "-m", "pip", "install", str(artifact)],
+        cwd=venv_dir,
+        env=env,
+    )
+    if status:
+        return status
+
+    outside = Path(tempfile.mkdtemp(prefix="gvc-package-smoke-"))
+    code = (
+        "from pathlib import Path; "
+        "import importlib.metadata as md; "
+        "import gvc, gvc.cquery, gvc.cdebinarize, gvc.data_structures.crc_id; "
+        "origin = Path(gvc.__file__).resolve(); "
+        "print('gvc origin:', origin); "
+        "print('gvc version:', md.version('gvc')); "
+        "assert md.version('gvc') == gvc.__version__; "
+        "assert " + repr(str(ROOT)) + " not in str(origin)"
+    )
+    status = _run_external([py, "-c", code], cwd=outside, env=env)
+    if status:
+        return status
+    return _run_external([py, "-m", "gvc", "--help"], cwd=outside, env=env)
+
+
+def packaging_gate():
+    if DIST_DIR.exists():
+        shutil.rmtree(str(DIST_DIR))
+    if PACKAGE_VENV_ROOT.exists():
+        shutil.rmtree(str(PACKAGE_VENV_ROOT))
+    DIST_DIR.mkdir(parents=True, exist_ok=True)
+    PACKAGE_VENV_ROOT.mkdir(parents=True, exist_ok=True)
+
+    status = run(
+        [
+            sys.executable,
+            "-m",
+            "build",
+            "--wheel",
+            "--sdist",
+            "--outdir",
+            str(DIST_DIR),
+        ]
+    )
+    if status:
+        return status
+
+    wheels = sorted(DIST_DIR.glob("gvc-*.whl"))
+    sdists = sorted(DIST_DIR.glob("gvc-*.tar.gz"))
+    if len(wheels) != 1 or len(sdists) != 1:
+        print(
+            "expected exactly one wheel and one sdist, got {} wheel(s) and {} sdist(s)".format(
+                len(wheels), len(sdists)
+            ),
+            file=sys.stderr,
+        )
+        return 2
+
+    status = _install_and_smoke_artifact(wheels[0], "wheel")
+    if status:
+        return status
+    return _install_and_smoke_artifact(sdists[0], "sdist")
+
 def cli_gate():
     return run([sys.executable, "-m", "gvc", "--help"])
 
@@ -129,6 +235,7 @@ GATES = {
     "native": native_gate,
     "test": test_gate,
     "optional": optional_gate,
+    "packaging": packaging_gate,
     "cli": cli_gate,
     "deps": dependency_gate,
     "dependencies": dependency_gate,

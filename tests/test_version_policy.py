@@ -26,6 +26,7 @@ def test_v1_0_dependency_policy_is_modern_and_bounded():
         '"Pillow>=10.4.0,<13"',
         '"pytest>=8.3.5,<10"',
         '"Cython>=3.2.9,<4"',
+        '"build>=1.2.2.post1,<2"',
     ]
     for requirement in expected:
         assert requirement in metadata

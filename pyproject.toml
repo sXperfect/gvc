@@ -56,10 +56,12 @@ all = [
 test = [
     "pytest>=8.3.5,<10",
     "Cython>=3.2.9,<4",
+    "build>=1.2.2.post1,<2",
 ]
 dev = [
     "pytest>=8.3.5,<10",
     "Cython>=3.2.9,<4",
+    "build>=1.2.2.post1,<2",
     "ruff>=0.15.12,<1",
 ]
 
