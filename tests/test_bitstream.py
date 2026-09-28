@@ -40,3 +40,10 @@ def test_random_access_handler_bounds_reads():
     assert handler.read(2) == b"cd"
     with pytest.raises(ValueError):
         handler.read(4)
+
+
+
+def test_read_bytes_rejects_truncated_input():
+    reader = BitstreamReader(BytesIO(b"\x01"))
+    with pytest.raises(EOFError, match="unexpected end"):
+        reader.read_bytes(2)

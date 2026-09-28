@@ -110,6 +110,12 @@ class BitstreamReader:
         if not self._byte_aligned():
             raise ValueError("bitstream must be byte-aligned")
         payload = self.input.read(n)
+        if len(payload) != n:
+            raise EOFError(
+                "unexpected end of bitstream: requested {}, received {}".format(
+                    n, len(payload)
+                )
+            )
         return bstr2int(payload) if ret_int else payload
 
     def seek(self, offset, whence=0):

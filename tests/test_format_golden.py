@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from gvc.bitstream import BitstreamReader
-from gvc.data_structures import ParameterSet, RowColIds, VectorAMax
+from gvc.data_structures import AccessUnit, Block, GenotypePayload, ParameterSet, RowColIds, VectorAMax
 from gvc.data_structures.consts import BinarizationID, CodecID, DataUnitType
 from gvc.data_structures.data_unit import DataUnitHeader
 
@@ -15,6 +15,10 @@ from gvc.data_structures.data_unit import DataUnitHeader
 V1_PARAMETER_SET_GOLDEN = bytes.fromhex("000000000b0380402906c0")
 V1_ROW_IDS_GOLDEN = bytes.fromhex("8d")
 V1_AMAX_GOLDEN = bytes.fromhex("000000050344e8")
+V1_BLOCK_GOLDEN = bytes.fromhex("000000000600000002aa55")
+V1_ACCESS_UNIT_GOLDEN = bytes.fromhex(
+    "0100000016000000070001000000000600000002aa55"
+)
 
 
 def _golden_parameter_set():
@@ -88,3 +92,59 @@ def test_parameter_set_detects_corrupted_declared_length():
 
     with pytest.raises(ValueError, match="length mismatch"):
         ParameterSet.from_bitstream(reader, header)
+
+
+
+def _simple_block_parameter_set():
+    return ParameterSet(
+        parameter_set_id=0,
+        any_missing_flag=False,
+        not_available_flag=False,
+        p=2,
+        binarization_id=BinarizationID.BIT_PLANE,
+        num_bin_mat=1,
+        concat_axis=2,
+        sort_variants_row_flags=[False],
+        sort_variants_col_flags=[False],
+        transpose_variants_mat_flags=[False],
+        variants_coder_ids=[CodecID.JBIG1],
+        encode_phase_data=False,
+        phase_value=False,
+    )
+
+
+def test_v1_block_framing_matches_golden_bytes():
+    parameter_set = _simple_block_parameter_set()
+    payload = GenotypePayload(
+        parameter_set,
+        variants_payloads=[b"\xaa\x55"],
+        variants_row_ids_payloads=[None],
+        variants_col_ids_payloads=[None],
+    )
+    block = Block.from_encoded_variant(payload)
+
+    assert block.to_bytes() == V1_BLOCK_GOLDEN
+
+
+def test_v1_access_unit_framing_matches_golden_bytes_and_decodes():
+    parameter_set = _simple_block_parameter_set()
+    payload = GenotypePayload(
+        parameter_set,
+        variants_payloads=[b"\xaa\x55"],
+        variants_row_ids_payloads=[None],
+        variants_col_ids_payloads=[None],
+    )
+    block = Block.from_encoded_variant(payload)
+    access_unit = AccessUnit.from_blocks(7, parameter_set.parameter_set_id, [block])
+
+    assert access_unit.to_bytes() == V1_ACCESS_UNIT_GOLDEN
+
+    reader = BitstreamReader(BytesIO(V1_ACCESS_UNIT_GOLDEN))
+    data_unit_type = reader.read_bytes(1, ret_int=True)
+    assert data_unit_type == DataUnitType.ACCESS_UNIT
+    restored = AccessUnit.from_bitstream(reader, {0: parameter_set})
+
+    assert restored.header.access_unit_id == 7
+    assert restored.header.parameter_set_id == 0
+    assert restored.num_blocks == 1
+    assert restored.blocks[0].block_payload.variants_payloads[0].read() == b"\xaa\x55"
