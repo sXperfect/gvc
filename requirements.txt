@@ -1,7 +1,6 @@
-# Compatibility/full-feature install for legacy workflows.
-# Canonical dependency metadata lives in pyproject.toml.
-numpy>=1.24.4
-scipy>=1.10.1
-cyvcf2>=0.33.0
-numba>=0.58.1
-Pillow>=10.4.0
+# Convenience runtime requirements for manual environments.
+# Canonical dependency policy and Python-version markers live in pyproject.toml.
+numpy>=1.21,<1.25; python_version < "3.9"
+numpy>=1.21,<2; python_version >= "3.9"
+scipy>=1.7,<1.11; python_version < "3.9"
+scipy>=1.7,<2; python_version >= "3.9"
