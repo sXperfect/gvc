@@ -56,11 +56,20 @@ def simd_tensor_to_txt(allele_tensor, phasing_tensor):
     index_mat = np.zeros(gt_matrix_str.shape, dtype=int)
     for k in range(1, p):
         allele_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k)
-        index_mat[complete_allele_mask] += allele_tensor[complete_allele_mask, k-1] * allele_factor
+        allele_values = allele_tensor[complete_allele_mask, k-1].astype(
+            np.int64, copy=False
+        )
+        index_mat[complete_allele_mask] += allele_values * allele_factor
         phase_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k-1)
-        index_mat[complete_allele_mask] += phasing_tensor[complete_allele_mask, k-1] * phase_factor
+        phase_values = phasing_tensor[complete_allele_mask, k-1].astype(
+            np.int64, copy=False
+        )
+        index_mat[complete_allele_mask] += phase_values * phase_factor
 
-    index_mat[complete_allele_mask] += allele_tensor[complete_allele_mask, -1]
+    final_alleles = allele_tensor[complete_allele_mask, -1].astype(
+        np.int64, copy=False
+    )
+    index_mat[complete_allele_mask] += final_alleles
     gt_matrix_str[complete_allele_mask] = np.array(codebook)[index_mat[complete_allele_mask]]
 
     if (flag_mask).any():
