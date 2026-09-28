@@ -36,18 +36,33 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Verify Python 3.8 core-only baseline
+      - name: Verify reviewed Python 3.8 latest stack
         run: |
+          python -m venv .venv-py38-reviewed
+          . .venv-py38-reviewed/bin/activate
           python -m pip install --upgrade "pip<25.1"
-          python -m pip install --upgrade --upgrade-strategy eager -e ".[test]"
+          PIP_CONSTRAINT=ci/constraints/py38-latest.txt \
+            python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python scripts/check_py38_latest.py
           python scripts/ci.py all
-
-      - name: Verify Python 3.8 optional integrations
-        run: |
-          python -m pip install --upgrade --upgrade-strategy eager -e ".[all]"
           python scripts/ci.py optional
-          python scripts/ci.py test
-          python scripts/ci.py deps
+          deactivate
+
+      - name: Clean reviewed Python 3.8 products
+        run: |
+          find gvc -name '*.so' -delete
+          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
+
+      - name: Verify Python 3.8 resolver has not moved
+        run: |
+          python -m venv .venv-py38-resolver
+          . .venv-py38-resolver/bin/activate
+          python -m pip install --upgrade "pip<25.1"
+          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python scripts/check_py38_latest.py
+          python -m pytest
+          python scripts/ci.py optional
+          deactivate
 
       - name: Clean Python 3.8 products
         run: |

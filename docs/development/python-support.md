@@ -36,3 +36,23 @@ NumPy, SciPy, Cython, pytest, Numba, cyvcf2, and Pillow releases.
 
 CI uses eager upgrades deliberately to make these dependency ceilings visible
 rather than accidentally passing against stale cached packages.
+
+
+## Python 3.8 compatibility gate
+
+Python 3.8 is treated as the compatibility anchor for the 1.0.x line.
+
+`ci/constraints/py38-latest.txt` records the reviewed newest stack currently
+known to support Python 3.8. CI uses it in two complementary ways:
+
+1. **reviewed stack** — install the exact versions and run the complete native,
+   serialization, golden-format, pipeline, VCF, CLI, and optional-integration
+   suite;
+2. **resolver probe** — create a second clean Python 3.8 environment without
+   constraints, request eager upgrades, and compare what pip resolves against
+   the reviewed ceiling.
+
+If an upstream project publishes a newer Python-3.8-compatible release, the
+resolver probe fails intentionally. The new version should be tested before the
+constraint is updated. This prevents both accidental stagnation and unreviewed
+dependency drift in the legacy-compatible release line.
