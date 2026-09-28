@@ -9,9 +9,9 @@ from .binarization import BINARIZATION_STR2ID
 
 SIGNED_ALLELE_DTYPE = np.int8
 ALLELE_DTYPE = np.uint8
-PHASING_DTYPE = np.bool
+PHASING_DTYPE = np.bool_
 MAX_VAL_DTYPE = ALLELE_DTYPE
-BIN_DTYPE = np.bool
+BIN_DTYPE = np.bool_
 PERMUTATION_DTYPE = np.uint16
 
 def create_parameter_set(
