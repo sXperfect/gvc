@@ -132,7 +132,10 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
         genotypes = variant.genotype.array()
         allele_matrix[i_var, :, :] = genotypes[:, :p]
         try:
-            phase_matrix[i_var, :, :] = genotypes[:, p:]
+            # cyvcf2 uses True for "|" while GVC serializes 0 for "|" and
+            # 1 for "/". Convert at the ingestion boundary so every internal
+            # path uses the same phase convention as split_genotype_matrix().
+            phase_matrix[i_var, :, :] = np.logical_not(genotypes[:, p:])
         except (ValueError, IndexError):
             pass
 
