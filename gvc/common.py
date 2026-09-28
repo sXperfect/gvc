@@ -4,8 +4,6 @@ import logging as log
 
 from .data_structures import AccessUnit, ParameterSet
 from .data_structures.consts import BinarizationID
-from .codec import CODEC_STR2ID
-from .binarization import BINARIZATION_STR2ID
 
 SIGNED_ALLELE_DTYPE = np.int8
 ALLELE_DTYPE = np.uint8
