@@ -107,16 +107,30 @@ class BitstreamReader:
             value = (value << 1) | self._read_bit()
         return value
 
-    def read_bytes(self, n, ret_int=False):
+    def require_available(self, n):
+        if n < 0:
+            raise ValueError("required byte count must be non-negative")
         if not self._byte_aligned():
             raise ValueError("bitstream must be byte-aligned")
-        payload = self.input.read(n)
-        if len(payload) != n:
+
+        current = self.input.tell()
+        try:
+            self.input.seek(0, 2)
+            end = self.input.tell()
+        finally:
+            self.input.seek(current)
+
+        available = end - current
+        if available < n:
             raise EOFError(
-                "unexpected end of bitstream: requested {}, received {}".format(
-                    n, len(payload)
+                "unexpected end of bitstream: requested {}, available {}".format(
+                    n, available
                 )
             )
+
+    def read_bytes(self, n, ret_int=False):
+        self.require_available(n)
+        payload = self.input.read(n)
         return bstr2int(payload) if ret_int else payload
 
     def seek(self, offset, whence=0):

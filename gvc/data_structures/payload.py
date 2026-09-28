@@ -263,6 +263,11 @@ class GenotypePayload:
 
         def payload_region(size_len, label):
             size = read_size(size_len, label)
+            # RandomAccessHandler keeps the payload lazy, but seek() itself can
+            # legally move beyond physical EOF. Validate the region before
+            # creating the lazy view so truncated files cannot masquerade as
+            # complete blocks.
+            reader.require_available(size)
             region = RandomAccessHandler(reader, reader.tell(), size)
             reader.seek(size, 1)
             return region

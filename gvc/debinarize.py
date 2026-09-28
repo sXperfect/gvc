@@ -34,7 +34,9 @@ def simd_tensor_to_txt(allele_tensor, phasing_tensor):
     avail_phase_val = '|/'
 
     if p == 1:
-        codebook = avail_allele_vals
+        # Keep one codebook entry per allele. np.array("...") would produce a
+        # scalar string and break indexed lookup for haploid genotypes.
+        codebook = list(avail_allele_vals)
     elif p > 1:
         codebook = ["".join(l) for l in it.product(avail_allele_vals, avail_phase_val, repeat=p-1)]
         codebook = ["".join(l) for l in it.product(codebook, avail_allele_vals)]

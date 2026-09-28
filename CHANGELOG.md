@@ -39,4 +39,8 @@ All notable changes to this repository will be documented here.
   `0 = |`, `1 = /` in Python and native helpers.
 - Native Cython helpers validate malformed dimensions before entering
   bounds-check-disabled loops.
+- Lazy genotype payload regions now validate physical byte availability before
+  seeking, so truncated files cannot be accepted by length arithmetic alone.
+- Haploid genotype text reconstruction now uses an indexable one-allele
+  codebook.
 - VCF and Numba integrations are lazy/optional rather than mandatory imports.
