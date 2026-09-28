@@ -51,7 +51,7 @@ A C/C++ compiler is required to build the Cython extensions. CMake is required o
 
 Run the same consolidated gate used by hosted CI:
 
-    ./scripts/verify.sh
+    bash scripts/verify.sh
 
 Focused checks are available through:
 
