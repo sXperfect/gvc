@@ -51,7 +51,7 @@ def simd_tensor_to_txt(allele_tensor, phasing_tensor):
 
     gt_matrix_str = np.empty((m,n), dtype='<U{}'.format(2*p))
 
-    index_mat = np.zeros(gt_matrix_str.shape, dtype=np.int)
+    index_mat = np.zeros(gt_matrix_str.shape, dtype=int)
     for k in range(1, p):
         allele_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k)
         index_mat[complete_allele_mask] += allele_tensor[complete_allele_mask, k-1] * allele_factor

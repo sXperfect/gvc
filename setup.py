@@ -1,31 +1,35 @@
-import sys
+from __future__ import annotations
+
+import os
 
 import numpy as np
 from Cython.Build import cythonize
 from setuptools import Extension, setup
 
-
-def _extension(name, source):
-    compile_args = ["-O3"]
-    link_args = []
-    if sys.platform.startswith("linux"):
-        compile_args.append("-fopenmp")
-        link_args.append("-fopenmp")
-
-    return Extension(
-        name,
-        sources=[source],
-        include_dirs=[np.get_include()],
-        extra_compile_args=compile_args,
-        extra_link_args=link_args,
-        language="c++",
-    )
-
+compile_args = ["/O2"] if os.name == "nt" else ["-O3"]
 
 extensions = [
-    _extension("gvc.data_structures.crc_id", "gvc/data_structures/crc_id.pyx"),
-    _extension("gvc.cdebinarize", "gvc/cdebinarize.pyx"),
-    _extension("gvc.cquery", "gvc/cquery.pyx"),
+    Extension(
+        "gvc.data_structures.crc_id",
+        ["gvc/data_structures/crc_id.pyx"],
+        include_dirs=[np.get_include()],
+        extra_compile_args=compile_args,
+        language="c++",
+    ),
+    Extension(
+        "gvc.cdebinarize",
+        ["gvc/cdebinarize.pyx"],
+        include_dirs=[np.get_include()],
+        extra_compile_args=compile_args,
+        language="c++",
+    ),
+    Extension(
+        "gvc.cquery",
+        ["gvc/cquery.pyx"],
+        include_dirs=[np.get_include()],
+        extra_compile_args=compile_args,
+        language="c++",
+    ),
 ]
 
 setup(
@@ -33,4 +37,5 @@ setup(
         extensions,
         compiler_directives={"language_level": "3"},
     ),
+    zip_safe=False,
 )

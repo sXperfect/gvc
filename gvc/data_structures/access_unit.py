@@ -1,139 +1,115 @@
-from ctypes import util
-from dataclasses import dataclass
-import logging as log
 import typing as t
 
-from gvc.data_structures import block, payload
 from . import consts
-from .param_set import ParameterSet
-from .data_unit import DataUnitHeader
 from .block import Block
-from ..bitstream import BitstreamReader, RandomAccessHandler
+from .data_unit import DataUnitHeader
+from .param_set import ParameterSet
+from ..bitstream import BitstreamReader
 from .. import utils
 
+
 def comp_blocks_size(blocks):
-    size = 0
-    for i in range(len(blocks)):
-        size += len(blocks[i])
-    return size
+    return sum(len(block) for block in blocks)
+
 
 class AccessUnitHeader(DataUnitHeader):
-    access_unit_id:int
-    parameter_set_id:int
-    num_blocks:int
-
     def __init__(self, content_len, access_unit_id, parameter_set_id, num_blocks):
-        super(AccessUnitHeader, self).__init__(
-            consts.DataUnitType.ACCESS_UNIT, 
-            content_len
-        )
-
+        super().__init__(consts.DataUnitType.ACCESS_UNIT, content_len)
         self.access_unit_id = access_unit_id
         self.parameter_set_id = parameter_set_id
         self.num_blocks = num_blocks
 
     @classmethod
     def from_blocks(cls, access_unit_id, parameter_set_id, blocks):
-        content_len = consts.ACCESS_UNIT_ID_LEN + consts.PARAMETER_SET_ID_LEN + consts.NUM_BLOCKS_LEN
-        content_len += comp_blocks_size(blocks)
-
-        num_blocks = len(blocks)
-
-        return cls(
-            content_len, access_unit_id, parameter_set_id, num_blocks
+        content_len = (
+            consts.ACCESS_UNIT_ID_LEN
+            + consts.PARAMETER_SET_ID_LEN
+            + consts.NUM_BLOCKS_LEN
+            + comp_blocks_size(blocks)
         )
+        return cls(content_len, access_unit_id, parameter_set_id, len(blocks))
 
     def to_barray(self):
-
-        payload:bytearray = super(AccessUnitHeader, self).to_barray(ret_bytes=False)
+        payload = super().to_barray(ret_bytes=False)
         payload += utils.int2bstr(self.access_unit_id, consts.ACCESS_UNIT_ID_LEN)
         payload += utils.int2bstr(self.parameter_set_id, consts.PARAMETER_SET_ID_LEN)
         payload += utils.int2bstr(self.num_blocks, consts.NUM_BLOCKS_LEN)
-
         return payload
 
     @classmethod
-    def from_bitstream(
-        cls, 
-        bitstream_reader:BitstreamReader
-    ):
+    def from_bitstream(cls, bitstream_reader: BitstreamReader):
         total_len = bitstream_reader.read_bytes(consts.DATA_UNIT_SIZE_LEN, ret_int=True)
-        content_len = total_len - (consts.DATA_UNIT_TYPE_LEN + consts.DATA_UNIT_SIZE_LEN)
+        base_header_len = consts.DATA_UNIT_TYPE_LEN + consts.DATA_UNIT_SIZE_LEN
+        fixed_content_len = (
+            consts.ACCESS_UNIT_ID_LEN
+            + consts.PARAMETER_SET_ID_LEN
+            + consts.NUM_BLOCKS_LEN
+        )
+        if total_len < base_header_len + fixed_content_len:
+            raise ValueError("access-unit length is smaller than its header")
 
-        access_unit_id = bitstream_reader.read_bytes(consts.ACCESS_UNIT_ID_LEN, ret_int=True)
-        parameter_set_id = bitstream_reader.read_bytes(consts.PARAMETER_SET_ID_LEN, ret_int=True)
+        content_len = total_len - base_header_len
+        access_unit_id = bitstream_reader.read_bytes(
+            consts.ACCESS_UNIT_ID_LEN, ret_int=True
+        )
+        parameter_set_id = bitstream_reader.read_bytes(
+            consts.PARAMETER_SET_ID_LEN, ret_int=True
+        )
         num_blocks = bitstream_reader.read_bytes(consts.NUM_BLOCKS_LEN, ret_int=True)
 
-        assert bitstream_reader._byte_aligned(), "Byte not aligned"
+        if not bitstream_reader._byte_aligned():
+            raise ValueError("access-unit header is not byte-aligned")
 
         return cls(content_len, access_unit_id, parameter_set_id, num_blocks)
 
 
-class AccessUnit(object):
-    def __init__(
-        self,
-        header:AccessUnitHeader,
-        blocks:t.List
-    ):
-        # self.access_unit_header = access_unit_header
+class AccessUnit:
+    def __init__(self, header: AccessUnitHeader, blocks: t.List[Block]):
+        if header.num_blocks != len(blocks):
+            raise ValueError("access-unit header block count does not match payload")
         self.header = header
         self.blocks = blocks
 
     @staticmethod
     def blocks_len(blocks):
-        size = 0
-        for i in range(len(blocks)):
-            size += len(blocks[i])
+        return comp_blocks_size(blocks)
 
     @property
     def num_blocks(self):
         return len(self.blocks)
 
-    # def get_param_set_id(self):
-    #     return self.access_unit_header.parameter_set_id
-
-    # def blocks_to_binary(self):
-    #     blocks_b = b''
-
-    #     for block in self.blocks:
-    #         blocks_b += block.to_bytes()
-        
-    #     return blocks_b
-
     def to_bytes(self):
         payload = self.header.to_barray()
-        for i in range(self.num_blocks):
-            payload += self.blocks[i].to_bytes()
-
+        for block in self.blocks:
+            payload += block.to_bytes()
         return bytes(payload)
 
     @classmethod
-    def from_bitstream(cls, 
-        istream:BitstreamReader, 
-        parameter_sets:t.List[ParameterSet]
-    ):
+    def from_bitstream(cls, istream: BitstreamReader, parameter_sets):
         start_pos = istream.tell()
-
         header = AccessUnitHeader.from_bitstream(istream)
-        param_set = parameter_sets[header.parameter_set_id]
 
-        blocks = [None] * header.num_blocks
-        for i in range(header.num_blocks):
-            blocks[i] = Block.from_bitstream(istream, param_set)
+        try:
+            param_set = parameter_sets[header.parameter_set_id]
+        except (KeyError, IndexError) as exc:
+            raise ValueError(
+                "missing parameter set {}".format(header.parameter_set_id)
+            ) from exc
+
+        blocks = [Block.from_bitstream(istream, param_set) for _ in range(header.num_blocks)]
+
+        expected_consumed = consts.DATA_UNIT_SIZE_LEN + header.content_len
+        consumed = istream.tell() - start_pos
+        if consumed != expected_consumed:
+            raise ValueError(
+                "access-unit length mismatch: expected {}, consumed {}".format(
+                    expected_consumed, consumed
+                )
+            )
 
         return cls(header, blocks)
 
     @classmethod
-    def from_blocks(
-        cls,
-        access_unit_id,
-        parameter_set_id,
-        blocks
-    ):
-        header = AccessUnitHeader.from_blocks(
-            access_unit_id,
-            parameter_set_id,
-            blocks
-        )
-
-        return cls(header, blocks)
+    def from_blocks(cls, access_unit_id, parameter_set_id, blocks):
+        header = AccessUnitHeader.from_blocks(access_unit_id, parameter_set_id, blocks)
+        return cls(header, list(blocks))

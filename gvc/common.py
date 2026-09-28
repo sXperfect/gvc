@@ -4,14 +4,12 @@ import logging as log
 
 from .data_structures import AccessUnit, ParameterSet
 from .data_structures.consts import BinarizationID
-from .codec import CODEC_STR2ID
-from .binarization import BINARIZATION_STR2ID
 
 SIGNED_ALLELE_DTYPE = np.int8
 ALLELE_DTYPE = np.uint8
-PHASING_DTYPE = np.bool
+PHASING_DTYPE = np.bool_
 MAX_VAL_DTYPE = ALLELE_DTYPE
-BIN_DTYPE = np.bool
+BIN_DTYPE = np.bool_
 PERMUTATION_DTYPE = np.uint16
 
 def create_parameter_set(
@@ -53,7 +51,7 @@ def create_parameter_set(
         raise ValueError('Invalid binarization_id: {}'.format(binarization_id))
 
     #? Handle the case where phasing matrix can be represented by a single value
-    if p == 1 or np.all(~phasing_matrix) or np.all(phasing_matrix):
+    if p == 1 or phasing_matrix is None or np.all(~phasing_matrix) or np.all(phasing_matrix):
         if phasing_matrix is None:
             phasing_value = 0
         else:

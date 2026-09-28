@@ -8,7 +8,6 @@ import itertools as it
 import gvc.common
 
 from .data_structures.consts import BinarizationID
-from . import cdebinarize
 from . import debinarize
 
 _phasing_dict = {
@@ -251,7 +250,7 @@ def reconstruct_genotype_matrix(allele_matrix, phasing_matrix, p):
         if isinstance(phasing_matrix, int):
             allele_tensor_shape = allele_tensor.shape
 
-            phasing_tensor = np.zeros((*allele_tensor_shape[:-1], p-1), dtype=np.bool)
+            phasing_tensor = np.zeros((*allele_tensor_shape[:-1], p-1), dtype=np.bool_)
             phasing_tensor[:, :, :] = phasing_matrix
 
         else:
@@ -446,7 +445,7 @@ def bin_bit_plane(matrix, axis=None, **kwargs):
 
     bit_planes = []
 
-    bit_depth = np.ceil(np.log2(matrix.max() + 1)).astype(gvc.common.ALLELE_DTYPE)
+    bit_depth = max(1, int(np.ceil(np.log2(int(matrix.max()) + 1))))
 
     for i_bit in range(bit_depth):
         bit_tensor = np.bitwise_and(matrix, int(2**i_bit)).astype(gvc.common.BIN_DTYPE)
@@ -460,7 +459,7 @@ def bin_bit_plane(matrix, axis=None, **kwargs):
             bin_matrices = bit_planes
         else:
             log.error('Invalid axis: {}'.format(axis))
-            raise gvc.errors.GvcError()
+            raise ValueError("invalid binarization argument")
     else:
         bin_matrices = bit_planes
 
@@ -478,7 +477,7 @@ def debin_bit_plane(bin_matrices, bit_depth, axis):
 
     else:
         log.error('Invalid axis: {}'.format(axis))
-        raise gvc.errors.GvcError()
+        raise ValueError("invalid binarization argument")
 
     assert bit_depth == len(bit_planes)
 
@@ -510,7 +509,7 @@ def bin_row_bin_split(matrix, **kwargs):
 
     nrow = matrix.shape[0]
 
-    bitlen_vect = np.max(matrix, axis=1).astype(np.uint)
+    bitlen_vect = np.max(matrix, axis=1).astype(np.uint64)
     # Force max value 0 to 1
     bitlen_vect[bitlen_vect == 0] = 1
 
@@ -518,9 +517,9 @@ def bin_row_bin_split(matrix, **kwargs):
     log.debug("Greatest value in the block: {}".format(bitlen_vect.max()))
 
     bitlen_vect = np.ceil(np.log2(bitlen_vect + 1)).astype(np.uint16)
-    bin_mat_nrows = np.sum(bitlen_vect).astype(np.uint)
+    bin_mat_nrows = int(np.sum(bitlen_vect))
     bin_mat_shape = (bin_mat_nrows, matrix.shape[1])
-    bin_mat = np.zeros(bin_mat_shape, dtype=np.bool)
+    bin_mat = np.zeros(bin_mat_shape, dtype=np.bool_)
 
     i_b = 0  # row id in bin_mat
     for i in range(nrow):  # iterate over rows in matrix
@@ -528,7 +527,7 @@ def bin_row_bin_split(matrix, **kwargs):
         bitlen = bitlen_vect[i]
 
         for i_bit in range(bitlen):
-            bin_mat[i_b + i_bit] = np.bitwise_and(matrix[i, :], int(2**i_bit)).astype(np.bool)
+            bin_mat[i_b + i_bit] = np.bitwise_and(matrix[i, :], int(2**i_bit)).astype(np.bool_)
 
         i_b += bitlen
 
@@ -537,7 +536,7 @@ def bin_row_bin_split(matrix, **kwargs):
 def debin_row_bin_split(bin_matrices, bitlen_vect, **kwargs):
 
     try:
-        if isinstance(bin_matrices, List):
+        if isinstance(bin_matrices, list):
             bin_mat = bin_matrices[0]
         elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 1:
             bin_mat = bin_matrices[0]
@@ -629,7 +628,7 @@ def binarize_allele_matrix(
 
     bin_matrices, additional_info = binarizer(matrix, axis=axis)
     
-    if not isinstance(bin_matrices, List):
+    if not isinstance(bin_matrices, list):
         bin_matrices = [bin_matrices]
 
     return bin_matrices, additional_info
