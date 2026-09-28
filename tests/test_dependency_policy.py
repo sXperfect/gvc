@@ -32,6 +32,11 @@ def test_optional_dependency_versions_when_installed():
     numba = pytest.importorskip("numba")
     pillow = pytest.importorskip("PIL")
 
-    assert (0, 33, 0) <= _version_tuple(cyvcf2.__version__) < (1, 0)
+    cyvcf2_version = _version_tuple(cyvcf2.__version__)
+    if sys.version_info[:2] == (3, 8):
+        assert (0, 31, 4) <= cyvcf2_version < (0, 32)
+    else:
+        assert (0, 34, 0) <= cyvcf2_version < (1, 0)
+
     assert (0, 58, 1) <= _version_tuple(numba.__version__) < (1, 0)
     assert (10, 4, 0) <= _version_tuple(pillow.__version__) < (13, 0)

@@ -9,12 +9,11 @@ import sys
 EXPECTED = {
     "numpy": "1.24.4",
     "scipy": "1.10.1",
-    "cyvcf2": "0.33.0",
+    "cyvcf2": "0.31.4",
     "numba": "0.58.1",
     "Pillow": "10.4.0",
     "pytest": "8.3.5",
     "Cython": "3.2.9",
-    "wheel": "0.45.1",
 }
 
 

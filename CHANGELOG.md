@@ -8,6 +8,8 @@ All notable changes to this repository will be documented here.
 
 - Native Cython extension regression tests for query-index expansion,
   row-split decoding, and permutation decoding across the Python/NumPy matrix.
+- Byte-exact v1 golden-format tests, malformed-stream boundaries, tiny VCF
+  integration fixtures, and generated ploidy/phase pipeline cases.
 
 - Explicit GVC 1.0.x Python 3.8 support contract and minor-line Python-floor policy.
 - Modern PEP 517/518 package metadata.
@@ -24,6 +26,8 @@ All notable changes to this repository will be documented here.
   with Python 3.8: NumPy 1.24.4 and SciPy 1.10.1.
 - Optional VCF, acceleration, and JBIG-example dependencies use modern lower
   bounds while allowing newer Python versions to resolve newer releases.
+- Python 3.8 VCF integration is pinned to the last wheel-backed cyvcf2 0.31.x
+  line; Python 3.9+ uses cyvcf2 0.34+.
 - The unmaintained `tspsolve` dependency is replaced by the internal
   deterministic nearest-neighbor implementation.
 - Deprecated NumPy scalar aliases are removed from maintained code paths.

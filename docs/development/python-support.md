@@ -23,7 +23,7 @@ as its lower bound, plus a next-major upper bound:
 
 - NumPy >=1.24.4,<3
 - SciPy >=1.10.1,<2
-- cyvcf2 >=0.33.0,<1 (optional VCF support)
+- cyvcf2 0.31.4 on Python 3.8 (last release with CPython 3.8 wheels); cyvcf2 >=0.34.0,<1 on Python >=3.9
 - Numba >=0.58.1,<1 (optional acceleration)
 - Pillow >=10.4.0,<13 (optional JBIG integration support)
 - pytest >=8.3.5,<10
@@ -32,7 +32,7 @@ as its lower bound, plus a next-major upper bound:
 pip then uses each project's Requires-Python metadata to select the newest
 compatible release on the active interpreter. Thus Python 3.8 retains a modern
 but compatible dependency generation, while newer interpreters exercise newer
-NumPy, SciPy, Cython, pytest, Numba, cyvcf2, and Pillow releases.
+NumPy, SciPy, Cython, pytest, Numba, cyvcf2, and Pillow releases. The VCF extra uses an explicit interpreter marker because cyvcf2 0.33.0 declares Python 3.8 compatibility but no longer publishes CPython 3.8 wheels.
 
 CI uses eager upgrades deliberately to make these dependency ceilings visible
 rather than accidentally passing against stale cached packages.

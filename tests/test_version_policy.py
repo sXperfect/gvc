@@ -20,7 +20,8 @@ def test_v1_0_dependency_policy_is_modern_and_bounded():
     expected = [
         '"numpy>=1.24.4,<3"',
         '"scipy>=1.10.1,<2"',
-        '"cyvcf2>=0.33.0,<1"',
+        '"cyvcf2>=0.31.4,<0.32; python_version < \'3.9\'"',
+        '"cyvcf2>=0.34.0,<1; python_version >= \'3.9\'"',
         '"numba>=0.58.1,<1"',
         '"Pillow>=10.4.0,<13"',
         '"pytest>=8.3.5,<10"',
