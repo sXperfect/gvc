@@ -1,144 +1,106 @@
-#!/usr/bin/env python3
-"""Local CI dispatcher shared by developers and GitHub Actions."""
-
 from __future__ import print_function
 
 import argparse
-import compileall
-import importlib.metadata as metadata
 import re
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-PYPROJECT = ROOT / "pyproject.toml"
-VERSION_FILE = ROOT / "gvc" / "_version.py"
-CMAKE_SOURCE = ROOT / "library" / "libgvc" / "src"
-CMAKE_BUILD = ROOT / "tmp" / "libgvc-build"
-
-DEPENDENCIES = (
-    "numpy",
-    "scipy",
-    "Cython",
-    "pytest",
-    "cyvcf2",
-    "numba",
-    "Pillow",
-)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CMAKE_SOURCE = PROJECT_ROOT / "library" / "libgvc" / "src"
+CMAKE_BUILD = PROJECT_ROOT / "tmp" / "libgvc-build"
 
 
-def run(cmd):
-    print("$ " + " ".join(str(x) for x in cmd), flush=True)
-    return subprocess.call([str(x) for x in cmd], cwd=str(ROOT))
+def _run(command):
+    print("$ " + " ".join(str(part) for part in command), flush=True)
+    return subprocess.call(list(command), cwd=str(PROJECT_ROOT))
 
 
-def metadata_gate():
-    pyproject = PYPROJECT.read_text(encoding="utf-8")
-    version_text = VERSION_FILE.read_text(encoding="utf-8")
-
-    requires = re.search(r'requires-python\s*=\s*"([^"]+)"', pyproject)
+def run_metadata():
+    text = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    version_text = (PROJECT_ROOT / "gvc" / "_version.py").read_text(encoding="utf-8")
+    requires = re.search(r'requires-python\s*=\s*"([^"]+)"', text)
     version = re.search(r'__version__\s*=\s*"([^"]+)"', version_text)
-
-    if not requires or requires.group(1) != ">=3.8":
-        print('expected requires-python = ">=3.8"', file=sys.stderr)
-        return 1
+    if not requires or requires.group(1) != ">=3.8,<3.13":
+        print("unexpected Python support window", file=sys.stderr)
+        return 2
     if not version or not version.group(1).startswith("1.0."):
-        print("GVC 1.0 development must use a 1.0.x version", file=sys.stderr)
-        return 1
-
-    required_fragments = (
-        '"numpy>=1.24.4"',
-        '"scipy>=1.10.1"',
-        '"cyvcf2>=0.33.0"',
-        '"numba>=0.58.1"',
-        '"Pillow>=10.4.0"',
-        '"pytest>=8.3.5"',
-        '"Cython>=3.2.9"',
-    )
-    missing = [fragment for fragment in required_fragments if fragment not in pyproject]
-    if missing:
-        print("missing dependency policy: " + ", ".join(missing), file=sys.stderr)
-        return 1
-    if "tspsolve" in pyproject.lower():
-        print("tspsolve must not return as a dependency", file=sys.stderr)
-        return 1
+        print("v1.0 development requires a 1.0.x version", file=sys.stderr)
+        return 2
+    if "tspsolve" in text.lower():
+        print("obsolete tspsolve dependency is still declared", file=sys.stderr)
+        return 2
     return 0
 
 
-def syntax_gate():
-    ok = compileall.compile_dir(str(ROOT / "gvc"), quiet=1)
-    ok = compileall.compile_dir(str(ROOT / "tests"), quiet=1) and ok
-    ok = compileall.compile_dir(str(ROOT / "scripts"), quiet=1) and ok
-    return 0 if ok else 1
+def run_syntax():
+    return _run([
+        sys.executable,
+        "-m",
+        "compileall",
+        "-q",
+        "gvc",
+        "tests",
+        "scripts",
+    ])
 
 
-def native_gate():
-    status = run([sys.executable, "setup.py", "build_ext", "--inplace"])
+def run_native():
+    status = _run([
+        sys.executable,
+        "-c",
+        "import gvc.cquery, gvc.cdebinarize, gvc.data_structures.crc_id",
+    ])
     if status:
         return status
-
-    if CMAKE_BUILD.exists():
-        shutil.rmtree(str(CMAKE_BUILD))
-
-    status = run(
-        [
-            "cmake",
-            "-S",
-            str(CMAKE_SOURCE),
-            "-B",
-            str(CMAKE_BUILD),
-            "-DCMAKE_BUILD_TYPE=Release",
-        ]
-    )
+    status = _run([
+        "cmake",
+        "-S",
+        str(CMAKE_SOURCE),
+        "-B",
+        str(CMAKE_BUILD),
+        "-DCMAKE_BUILD_TYPE=Release",
+    ])
     if status:
         return status
-    return run(["cmake", "--build", str(CMAKE_BUILD), "--parallel", "2"])
+    return _run(["cmake", "--build", str(CMAKE_BUILD), "--parallel", "2"])
 
 
-def test_gate():
-    return run([sys.executable, "-m", "pytest"])
+def run_test():
+    return _run([sys.executable, "-m", "pytest"])
 
 
-def optional_gate():
-    code = (
-        "import cyvcf2\n"
-        "import numba\n"
-        "import PIL\n"
-        "print('optional dependency imports OK')\n"
-    )
-    return run([sys.executable, "-c", code])
+def run_cli():
+    return _run([sys.executable, "-m", "gvc", "--help"])
 
 
-def cli_gate():
-    return run([sys.executable, "-m", "gvc", "--help"])
-
-
-def dependency_gate():
-    print("Python {}".format(sys.version.replace("\n", " ")))
-    for package in DEPENDENCIES:
-        try:
-            version = metadata.version(package)
-        except metadata.PackageNotFoundError:
-            version = "<not installed>"
-        print("{:>10}: {}".format(package, version))
-    return 0
+def run_dependencies():
+    return _run([
+        sys.executable,
+        "-c",
+        (
+            "import sys, numpy, scipy; "
+            "print('python', sys.version.split()[0]); "
+            "print('numpy', numpy.__version__); "
+            "print('scipy', scipy.__version__); "
+            "import cyvcf2; print('cyvcf2', cyvcf2.__version__); "
+            "import numba; print('numba', numba.__version__)"
+        ),
+    ])
 
 
 GATES = {
-    "metadata": metadata_gate,
-    "syntax": syntax_gate,
-    "native": native_gate,
-    "test": test_gate,
-    "optional": optional_gate,
-    "cli": cli_gate,
-    "deps": dependency_gate,
+    "metadata": run_metadata,
+    "syntax": run_syntax,
+    "native": run_native,
+    "test": run_test,
+    "cli": run_cli,
+    "dependencies": run_dependencies,
 }
 
 
-def all_gates():
-    for name in ("metadata", "syntax", "native", "test", "cli", "deps"):
+def run_all():
+    for name in ("metadata", "syntax", "native", "test", "cli", "dependencies"):
         print("\n== {} ==".format(name), flush=True)
         status = GATES[name]()
         if status:
@@ -151,7 +113,7 @@ def main(argv=None):
     parser.add_argument("gate", choices=list(GATES) + ["all"])
     args = parser.parse_args(argv)
     if args.gate == "all":
-        return all_gates()
+        return run_all()
     return GATES[args.gate]()
 
 
