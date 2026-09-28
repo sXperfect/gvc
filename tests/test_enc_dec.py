@@ -1,4 +1,3 @@
-from os import getcwd
 import io
 import os
 from os.path import join
@@ -50,7 +49,7 @@ class TestEncodeDecode(unittest.TestCase):
         codec_module.MAT_CODECS[self.codec_id].update(self._original_codec)
 
     def _require_vcf_fixture(self):
-        fpath = self._require_vcf_fixture()
+        fpath = join(os.path.dirname(__file__), self.vcf01_fpath)
         if not os.path.isfile(fpath):
             self.skipTest(
                 "large upstream VCF fixture is not present in this repository"
@@ -158,7 +157,7 @@ class TestEncodeDecode(unittest.TestCase):
                     
     def test_roundtrip_vcf01(self):
         
-        fpath = join(getcwd(), 'tests', self.vcf01_fpath)
+        fpath = self._require_vcf_fixture()
         for binarization_id in [BinarizationID.ROW_BIN_SPLIT, BinarizationID.BIT_PLANE]:
             for [sort_rows, sort_cols] in it.product([False, True], repeat=2):                
                 ps_params = [
