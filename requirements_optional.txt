@@ -1,4 +1,5 @@
-# Prefer package extras instead of this compatibility file:
+# Optional dependencies are managed as package extras in pyproject.toml.
+# Prefer:
 #   python -m pip install -e ".[all]"
 cyvcf2>=0.33.0,<1
 numba>=0.58.1,<1

@@ -1,8 +1,8 @@
 import sys
 
 import numpy as np
-import scipy
 import pytest
+import scipy
 
 
 def _version_tuple(value):
@@ -15,35 +15,23 @@ def _version_tuple(value):
     return tuple(parts)
 
 
-def test_runtime_dependency_window_matches_python():
+def test_supported_interpreter_floor():
+    assert sys.version_info[:2] >= (3, 8)
+
+
+def test_core_dependency_versions_stay_inside_v1_compatibility():
     numpy_version = _version_tuple(np.__version__)
     scipy_version = _version_tuple(scipy.__version__)
 
-    if sys.version_info < (3, 9):
-        assert numpy_version < (1, 25)
-        assert scipy_version < (1, 11)
-    else:
-        assert numpy_version < (2, 0)
-        assert scipy_version < (2, 0)
+    assert (1, 24, 4) <= numpy_version < (3, 0)
+    assert (1, 10, 1) <= scipy_version < (2, 0)
 
 
-def test_supported_interpreter_window():
-    assert (3, 8) <= sys.version_info[:2] < (3, 13)
-
-
-def test_optional_dependency_versions_match_python():
+def test_optional_dependency_versions_when_installed():
     cyvcf2 = pytest.importorskip("cyvcf2")
     numba = pytest.importorskip("numba")
+    pillow = pytest.importorskip("PIL")
 
-    cyvcf2_version = _version_tuple(cyvcf2.__version__)
-    numba_version = _version_tuple(numba.__version__)
-
-    if sys.version_info < (3, 9):
-        assert (0, 31, 4) <= cyvcf2_version < (0, 32)
-        assert (0, 57, 1) <= numba_version < (0, 58)
-    elif sys.version_info < (3, 10):
-        assert (0, 34) <= cyvcf2_version < (0, 35)
-        assert (0, 60) <= numba_version < (0, 61)
-    else:
-        assert (0, 34) <= cyvcf2_version < (0, 35)
-        assert (0, 67) <= numba_version < (0, 68)
+    assert (0, 33, 0) <= _version_tuple(cyvcf2.__version__) < (1, 0)
+    assert (0, 58, 1) <= _version_tuple(numba.__version__) < (1, 0)
+    assert (10, 4, 0) <= _version_tuple(pillow.__version__) < (13, 0)

@@ -19,7 +19,7 @@ We kindly ask to refrain from publishing analyses that were conducted using this
 ## Dependencies
 ---
 
-GVC 1.0.x supports Python 3.8 through 3.12. CMake and a C/C++ compiler are
+GVC 1.0.x supports Python 3.8 or newer. CMake and a C/C++ compiler are
 required for the native components. Future minor release lines may raise the
 minimum Python version; older release lines remain available for legacy Python
 environments. See [docs/design/versioning.md](docs/design/versioning.md).

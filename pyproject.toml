@@ -1,59 +1,68 @@
 [build-system]
 requires = [
-  "setuptools>=65,<70",
-  "wheel>=0.38,<0.46",
-  "Cython>=0.29.36,<3.0",
-  "numpy>=1.21,<1.25; python_version < '3.9'",
-  "numpy>=1.21,<2; python_version >= '3.9'",
+    "setuptools>=68",
+    "wheel>=0.45.1,<1",
+    "Cython>=3.2.9,<4",
+    "numpy>=1.24.4,<3",
 ]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "gvc"
 dynamic = ["version"]
-description = "Genomic Variant Codec"
+description = "Genomic Variant Codec for compact genotype representation"
 readme = "README.md"
-requires-python = ">=3.8,<3.13"
+requires-python = ">=3.8"
 license = { file = "LICENSE" }
+authors = [
+    { name = "GVC contributors" },
+]
 classifiers = [
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.8",
-  "Programming Language :: Python :: 3.9",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-  "numpy>=1.21,<1.25; python_version < '3.9'",
-  "numpy>=1.21,<2; python_version >= '3.9'",
-  "scipy>=1.7,<1.11; python_version < '3.9'",
-  "scipy>=1.7,<2; python_version >= '3.9'",
+    "numpy>=1.24.4,<3",
+    "scipy>=1.10.1,<2",
 ]
 
 [project.optional-dependencies]
 vcf = [
-  "cyvcf2>=0.31.4,<0.32; python_version < '3.9'",
-  "cyvcf2>=0.34,<0.35; python_version >= '3.9'",
+    "cyvcf2>=0.33.0,<1",
 ]
 speed = [
-  "numba>=0.57.1,<0.58; python_version < '3.9'",
-  "numba>=0.60,<0.61; python_version == '3.9'",
-  "numba>=0.67,<0.68; python_version >= '3.10'",
+    "numba>=0.58.1,<1",
 ]
-test = [
-  "pytest>=8.3,<8.4; python_version < '3.9'",
-  "pytest>=8.4,<9; python_version == '3.9'",
-  "pytest>=9.1,<10; python_version >= '3.10'",
+jbig = [
+    "Pillow>=10.4.0,<13",
 ]
 all = [
-  "cyvcf2>=0.31.4,<0.32; python_version < '3.9'",
-  "cyvcf2>=0.34,<0.35; python_version >= '3.9'",
-  "numba>=0.57.1,<0.58; python_version < '3.9'",
-  "numba>=0.60,<0.61; python_version == '3.9'",
-  "numba>=0.67,<0.68; python_version >= '3.10'",
+    "cyvcf2>=0.33.0,<1",
+    "numba>=0.58.1,<1",
+    "Pillow>=10.4.0,<13",
 ]
+test = [
+    "pytest>=8.3.5,<10",
+    "Cython>=3.2.9,<4",
+]
+dev = [
+    "pytest>=8.3.5,<10",
+    "Cython>=3.2.9,<4",
+    "ruff>=0.15.12,<1",
+]
+
+[project.scripts]
+gvc = "gvc.__main__:main"
 
 [project.urls]
 Repository = "https://github.com/sXperfect/gvc"
@@ -69,3 +78,13 @@ include = ["gvc*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-config", "--strict-markers"]
+markers = [
+    "optional: requires GVC optional dependency extras",
+]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
