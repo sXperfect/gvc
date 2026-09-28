@@ -8,8 +8,9 @@ All notable changes to this repository will be documented here.
 
 - Native Cython extension regression tests for query-index expansion,
   row-split decoding, and permutation decoding across the Python/NumPy matrix.
-- Byte-exact v1 golden-format tests, malformed-stream boundaries, tiny VCF
-  integration fixtures, and generated ploidy/phase pipeline cases.
+- Byte-exact v1 golden-format tests, exhaustive byte-truncation rejection,
+  malformed-stream boundaries, tiny VCF integration fixtures, and generated
+  ploidy/phase pipeline cases.
 
 - Explicit GVC 1.0.x Python 3.8 support contract and minor-line Python-floor policy.
 - Modern PEP 517/518 package metadata.
@@ -34,4 +35,8 @@ All notable changes to this repository will be documented here.
 - The unmaintained `tspsolve` dependency is replaced by the internal
   deterministic nearest-neighbor implementation.
 - Deprecated NumPy scalar aliases are removed from maintained code paths.
+- Phasing text reconstruction now consistently follows the GVC convention
+  `0 = |`, `1 = /` in Python and native helpers.
+- Native Cython helpers validate malformed dimensions before entering
+  bounds-check-disabled loops.
 - VCF and Numba integrations are lazy/optional rather than mandatory imports.

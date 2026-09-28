@@ -47,3 +47,10 @@ def test_read_bytes_rejects_truncated_input():
     reader = BitstreamReader(BytesIO(b"\x01"))
     with pytest.raises(EOFError, match="unexpected end"):
         reader.read_bytes(2)
+
+
+
+def test_read_bits_rejects_end_of_stream():
+    reader = BitstreamReader(BytesIO(b""))
+    with pytest.raises(EOFError, match="unexpected end"):
+        reader.read_bits(1)

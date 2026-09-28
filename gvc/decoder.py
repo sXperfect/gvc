@@ -537,9 +537,14 @@ class Decoder(object):
         log.info('Caching data')
 
         while True:
-            data_unit_type = self._bitstream_reader.read_bits(consts.DATA_UNIT_TYPE_LEN * 8)
-
-            if not self._bitstream_reader.read:
+            try:
+                data_unit_type = self._bitstream_reader.read_bits(
+                    consts.DATA_UNIT_TYPE_LEN * 8
+                )
+            except EOFError:
+                # Reaching EOF exactly between data units is the normal end of
+                # a GVC stream. EOF inside a data unit still propagates from
+                # that unit's parser as corruption.
                 break
 
             if data_unit_type == consts.DataUnitType.PARAMETER_SET:

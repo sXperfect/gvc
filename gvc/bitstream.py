@@ -83,10 +83,11 @@ class BitstreamReader:
     def _read_bit(self):
         if not self._bit_count:
             data = self.input.read(1)
-            if data:
-                self._accumulator = data[0]
-            self._bit_count = 8
             self.read = len(data)
+            if not data:
+                raise EOFError("unexpected end of bitstream while reading bits")
+            self._accumulator = data[0]
+            self._bit_count = 8
         value = (self._accumulator & (1 << (self._bit_count - 1))) >> (
             self._bit_count - 1
         )

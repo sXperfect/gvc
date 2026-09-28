@@ -148,3 +148,31 @@ def test_v1_access_unit_framing_matches_golden_bytes_and_decodes():
     assert restored.header.parameter_set_id == 0
     assert restored.num_blocks == 1
     assert restored.blocks[0].block_payload.variants_payloads[0].read() == b"\xaa\x55"
+
+
+
+def _parse_parameter_set(payload):
+    reader = BitstreamReader(BytesIO(payload))
+    data_unit_type = reader.read_bytes(1, ret_int=True)
+    if data_unit_type != DataUnitType.PARAMETER_SET:
+        raise ValueError("not a parameter set")
+    header = DataUnitHeader.from_bitstream(data_unit_type, reader)
+    return ParameterSet.from_bitstream(reader, header)
+
+
+@pytest.mark.parametrize("cut", range(len(V1_PARAMETER_SET_GOLDEN)))
+def test_v1_parameter_set_rejects_every_byte_truncation(cut):
+    with pytest.raises((EOFError, ValueError)):
+        _parse_parameter_set(V1_PARAMETER_SET_GOLDEN[:cut])
+
+
+@pytest.mark.parametrize("cut", range(len(V1_ACCESS_UNIT_GOLDEN)))
+def test_v1_access_unit_rejects_every_byte_truncation(cut):
+    reader = BitstreamReader(BytesIO(V1_ACCESS_UNIT_GOLDEN[:cut]))
+    parameter_set = _simple_block_parameter_set()
+
+    with pytest.raises((EOFError, ValueError)):
+        data_unit_type = reader.read_bytes(1, ret_int=True)
+        if data_unit_type != DataUnitType.ACCESS_UNIT:
+            raise ValueError("not an access unit")
+        AccessUnit.from_bitstream(reader, {0: parameter_set})

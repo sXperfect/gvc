@@ -31,7 +31,7 @@ def simd_tensor_to_txt(allele_tensor, phasing_tensor):
 
     max_val = allele_tensor.max()
     avail_allele_vals = '.' + "".join(np.arange(max_val+1).astype(str))
-    avail_phase_val = '/|'
+    avail_phase_val = '|/'
 
     if p == 1:
         codebook = avail_allele_vals
@@ -86,7 +86,7 @@ def matrix_to_tensor(matrix, num_matrix):
 
     return np.concatenate(list_matrix, axis=1)
 
-PHASING_VAL2CHAR = ['/', '|']
+PHASING_VAL2CHAR = ['|', '/']
 ALLELE_VAL2CHAR = np.arange(18).astype(object)
 ALLELE_VAL2CHAR[-2] = ''
 ALLELE_VAL2CHAR[-1] = '.'
