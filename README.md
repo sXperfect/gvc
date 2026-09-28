@@ -79,6 +79,16 @@ The historical GVC codec registry defines the JBIG codec contract but does not b
 
 The unit suite deliberately does **not** depend on an external JBIG binary. It injects a deterministic lossless test codec so that GVC's own binarization, sorting, payload, and reconstruction logic can be tested independently of third-party codec installation.
 
+## Development and maintenance
+
+- [Contributing](CONTRIBUTING.md)
+- [Testing strategy](docs/design/testing.md)
+- [CI design](docs/design/ci.md)
+- [Python support policy](docs/development/python-support.md)
+- [Release process](docs/development/releases.md)
+- [Modernization roadmap](docs/design/modernization-roadmap.md)
+- [Changelog](CHANGELOG.md)
+
 ## Citation
 
 If you use GVC in research, please cite:
