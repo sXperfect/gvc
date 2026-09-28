@@ -6,19 +6,20 @@ All notable changes to this repository will be documented here.
 
 ### Added
 
-- Explicit GVC 1.x Python support policy with Python 3.8 as the minimum.
+- Explicit GVC 1.0.x Python 3.8 support contract and minor-line Python-floor policy.
 - Modern PEP 517/518 package metadata.
-- Self-contained pytest-based verification.
-- Local-first CI dispatcher and GitHub Actions workflow.
-- Provenance and modernization design documentation.
+- Self-contained pytest coverage for transforms, serialization, solver behavior,
+  CLI parsing, and end-to-end codec pipeline round trips.
+- Cross-version CI coverage for Python 3.8, 3.9, 3.10, 3.12, and 3.14.
+- Dependency-resolution reporting and optional-dependency smoke checks.
 
 ### Changed
 
-- VCF parsing and Numba acceleration are optional dependency surfaces.
-- Legacy dependency pins are replaced by compatibility ranges suitable for the Python 3.8 release line.
-- Nearest-neighbor ordering no longer requires the unmaintained tspsolve package.
-- Deprecated NumPy scalar aliases are removed from maintained paths.
-
-### Notes
-
-No GVC 2.x compatibility-floor change is part of this work. A higher minimum Python version will be considered only in a future major release.
+- GVC 1.0.x now starts from the newest scientific-stack generation compatible
+  with Python 3.8: NumPy 1.24.4 and SciPy 1.10.1.
+- Optional VCF, acceleration, and JBIG-example dependencies use modern lower
+  bounds while allowing newer Python versions to resolve newer releases.
+- The unmaintained `tspsolve` dependency is replaced by the internal
+  deterministic nearest-neighbor implementation.
+- Deprecated NumPy scalar aliases are removed from maintained code paths.
+- VCF and Numba integrations are lazy/optional rather than mandatory imports.

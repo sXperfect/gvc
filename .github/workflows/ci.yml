@@ -19,42 +19,110 @@ jobs:
     name: verify
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v5
+      - name: Python 3.8 — minimum supported interpreter
+        uses: actions/setup-python@v7
         with:
           python-version: "3.8"
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install GVC
-        run: python -m pip install -e .
+      - name: Install latest Python 3.8-compatible core/test dependencies
+        run: |
+          python -m pip install --upgrade "pip<25.1"
+          python -m pip install --upgrade --upgrade-strategy eager -e ".[test]"
 
-      - name: Verify Python 3.8 baseline
+      - name: Verify Python 3.8 core
         run: python scripts/ci.py all
 
-      - name: Clean native build products
+      - name: Install latest Python 3.8-compatible optional dependencies
+        run: python -m pip install --upgrade --upgrade-strategy eager -e ".[all]"
+
+      - name: Verify Python 3.8 optional dependency surface
+        run: |
+          python scripts/ci.py optional
+          python scripts/ci.py test
+          python scripts/ci.py deps
+
+      - name: Clean build products
         run: |
           find gvc -name '*.so' -delete
-          rm -rf build library/libgvc/build
+          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
 
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v5
+      - name: Python 3.9 — dependency transition coverage
+        uses: actions/setup-python@v7
         with:
           python-version: "3.9"
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install GVC on Python 3.9
-        run: python -m pip install -e .
+      - name: Verify Python 3.9 with newest resolvable dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python scripts/ci.py all
+          python scripts/ci.py optional
 
-      - name: Verify Python 3.9 compatibility
-        run: python scripts/ci.py all
+      - name: Clean build products
+        run: |
+          find gvc -name '*.so' -delete
+          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
+
+      - name: Python 3.10 — modern tooling transition coverage
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Verify Python 3.10 with newest resolvable dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python scripts/ci.py all
+          python scripts/ci.py optional
+
+      - name: Clean build products
+        run: |
+          find gvc -name '*.so' -delete
+          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
+
+      - name: Python 3.12 — current NumPy/SciPy generation
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Verify Python 3.12 with newest resolvable dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python scripts/ci.py all
+          python scripts/ci.py optional
+
+      - name: Clean build products
+        run: |
+          find gvc -name '*.so' -delete
+          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
+
+      - name: Python 3.14 — forward compatibility
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Verify Python 3.14 core with newest resolvable dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade --upgrade-strategy eager -e ".[test]"
+          python scripts/ci.py all

@@ -1,8 +1,7 @@
-# Runtime requirements for legacy/manual environments.
-# The canonical package metadata lives in pyproject.toml.
-numpy>=1.21,<1.24
-numba
-cyvcf2
-scipy
-tspsolve
-Pillow
+# Compatibility/full-feature install for legacy workflows.
+# Canonical dependency metadata lives in pyproject.toml.
+numpy>=1.24.4
+scipy>=1.10.1
+cyvcf2>=0.33.0
+numba>=0.58.1
+Pillow>=10.4.0
