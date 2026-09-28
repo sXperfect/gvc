@@ -79,6 +79,12 @@ The historical GVC codec registry defines the JBIG codec contract but does not b
 
 The unit suite deliberately does **not** depend on an external JBIG binary. It injects a deterministic lossless test codec so that GVC's own binarization, sorting, payload, and reconstruction logic can be tested independently of third-party codec installation.
 
+## Citation
+
+If you use GVC in research, please cite:
+
+> Y. G. Adhisantoso et al., "GVC: efficient random access compression for gene sequence variations," *BMC Bioinformatics*, 24, 121 (2023). https://doi.org/10.1186/s12859-023-05240-0
+
 ## Repository provenance
 
 This repository is a modernization of the historical open-source GVC implementation previously maintained at tnt-LUH/gvc. The original BSD license and copyright notices are retained in [LICENSE](LICENSE), and the historical README is preserved at [docs/history/README-upstream.md](docs/history/README-upstream.md).
