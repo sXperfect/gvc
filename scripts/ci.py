@@ -81,7 +81,15 @@ def syntax_gate():
 
 
 def native_gate():
-    status = run([sys.executable, "setup.py", "build_ext", "--inplace"])
+    # The environment is prepared with `pip install -e .`, which builds the
+    # Cython extensions through the declared PEP 517 backend. Verify those
+    # installed/in-place extension modules directly instead of invoking the
+    # deprecated setup.py command path.
+    status = run([
+        sys.executable,
+        "-c",
+        "import gvc.cquery, gvc.cdebinarize, gvc.data_structures.crc_id",
+    ])
     if status:
         return status
 
