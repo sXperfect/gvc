@@ -6,6 +6,9 @@ All notable changes to this repository will be documented here.
 
 ### Added
 
+- Native Cython extension regression tests for query-index expansion,
+  row-split decoding, and permutation decoding across the Python/NumPy matrix.
+
 - Explicit GVC 1.0.x Python 3.8 support contract and minor-line Python-floor policy.
 - Modern PEP 517/518 package metadata.
 - Self-contained pytest coverage for transforms, serialization, solver behavior,

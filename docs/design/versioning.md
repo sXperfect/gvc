@@ -28,16 +28,15 @@ Before main moves to a new minor line, create a maintenance branch such as
 The 1.0.x package uses the newest dependency generation that can still be
 installed on Python 3.8 as its lower bound:
 
-- NumPy >= 1.24.4
-- SciPy >= 1.10.1
-- cyvcf2 >= 0.33.0 for the optional VCF surface
-- Numba >= 0.58.1 for optional acceleration
-- Pillow >= 10.4.0 for the optional JBIG integration example
-- pytest >= 8.3.5 for tests
-- Cython >= 3.2.9 for builds/tests
+- NumPy >= 1.24.4,<3
+- SciPy >= 1.10.1,<2
+- cyvcf2 >= 0.33.0,<1 for the optional VCF surface
+- Numba >= 0.58.1,<1 for optional acceleration
+- Pillow >= 10.4.0,<13 for the optional JBIG integration example
+- pytest >= 8.3.5,<10 for tests
+- Cython >= 3.2.9,<4 for builds/tests
 
-There are intentionally no global upper pins for these runtime/test
-dependencies. pip uses each dependency's own `Requires-Python` metadata to
+Upper bounds stop at the next major release so an untested future major dependency cannot silently enter a GVC 1.0.x environment. pip uses each dependency's own `Requires-Python` metadata to
 choose the newest resolvable release for the active interpreter. This means a
 Python 3.8 environment receives the newest compatible legacy generation while
 newer Python environments exercise newer NumPy/SciPy and toolchain releases.

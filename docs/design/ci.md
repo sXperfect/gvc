@@ -21,10 +21,12 @@ interpreter/dependency transitions in one hosted job:
 | Python | Purpose |
 | --- | --- |
 | 3.8 | minimum interpreter + newest dependencies still resolvable there |
-| 3.9 | cyvcf2/newer scientific-stack transition |
-| 3.10 | modern pytest/Pillow/tooling transition |
-| 3.12 | current NumPy/SciPy generation |
-| 3.14 | forward-compatible core smoke/regression coverage |
+| 3.9 | first post-floor dependency transition |
+| 3.10 | full native/core/optional gate |
+| 3.11 | intermediate compatibility regression coverage |
+| 3.12 | full current scientific-stack gate |
+| 3.13 | intermediate compatibility regression coverage |
+| 3.14 | forward-compatible core/native gate |
 
 Each environment uses pip's eager upgrade strategy so CI does not accidentally
 pass against stale cached dependencies.

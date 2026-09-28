@@ -24,8 +24,18 @@ required for the native components. Future minor release lines may raise the
 minimum Python version; older release lines remain available for legacy Python
 environments. See [docs/design/versioning.md](docs/design/versioning.md).
 For anaconda or conda user, CMAKE, gcc and gxx libraries are required and can be installed through: `conda install -c conda-forge cmake gxx_linux-64 gcc_linux-64`.
-See [requirements.txt](requirements.txt) for the list of required python libraries.
-<!-- For python version 3.6 or lower, an additional python package `dataclass` is required. -->
+The core numerical dependencies are declared in `pyproject.toml`. Install
+optional integrations explicitly:
+
+```bash
+python -m pip install -e ".[vcf]"      # VCF/BCF parsing
+python -m pip install -e ".[speed]"    # Numba acceleration
+python -m pip install -e ".[all]"      # all optional runtime integrations
+python -m pip install -e ".[test]"     # test/build tooling
+```
+
+`requirements.txt` remains a full-feature compatibility install for legacy
+workflows.
 
 ## Building
 ---
@@ -43,9 +53,8 @@ Build all native components and run the local verification gate with:
     bash setup.sh
     ./scripts/verify.sh
 
-This step will install and compile all dependencies automatically.
-<!-- This will create automaticaly a virtual environment with all dependencies installed located in `tmp/venv`.
-If you use conda environment, you can install all dependencies with command `python3 -m pip install -r requirements.txt`. -->
+The local verification gate compiles the Cython extensions and the standalone
+CMake helper before running the test suite.
 
 ### Entropy Codec
 ---
