@@ -1,0 +1,7 @@
+numpy==1.21
+cython==0.29.30
+numba
+cyvcf2
+scipy
+tspsolve
+Pillow
