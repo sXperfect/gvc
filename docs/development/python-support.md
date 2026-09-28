@@ -28,6 +28,7 @@ as its lower bound, plus a next-major upper bound:
 - Pillow >=10.4.0,<13 (optional JBIG integration support)
 - pytest >=8.3.5,<10
 - Cython >=3.2.9,<4
+- reviewed Python 3.8 build tooling: setuptools 75.3.3 and wheel 0.45.1
 
 pip then uses each project's Requires-Python metadata to select the newest
 compatible release on the active interpreter. Thus Python 3.8 retains a modern

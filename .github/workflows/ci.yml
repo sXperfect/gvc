@@ -43,6 +43,7 @@ jobs:
           python -m pip install --upgrade "pip<25.1"
           PIP_CONSTRAINT=ci/constraints/py38-latest.txt \
             python -m pip install --only-binary=:all: --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python -m pip check
           python scripts/check_py38_latest.py
           python scripts/ci.py all
           python scripts/ci.py optional
@@ -59,6 +60,7 @@ jobs:
           . .venv-py38-resolver/bin/activate
           python -m pip install --upgrade "pip<25.1"
           python -m pip install --only-binary=:all: --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python -m pip check
           python scripts/check_py38_latest.py
           python -m pytest
           python scripts/ci.py optional

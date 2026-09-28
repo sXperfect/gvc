@@ -15,7 +15,7 @@ All notable changes to this repository will be documented here.
 - Modern PEP 517/518 package metadata.
 - Self-contained pytest coverage for transforms, serialization, solver behavior,
   CLI parsing, and end-to-end codec pipeline round trips.
-- Cross-version CI coverage for Python 3.8, 3.9, 3.10, 3.12, and 3.14.
+- Cross-version CI coverage for Python 3.8 through 3.14, with Python 3.8 as the reviewed compatibility anchor.
 - Dependency-resolution reporting and optional-dependency smoke checks.
 
 ### Changed
