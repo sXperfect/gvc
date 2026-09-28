@@ -1,4 +1,10 @@
-autopep8
-pylint
-snakeviz
-pandas
+# Optional dependencies are managed as package extras in pyproject.toml.
+#
+# VCF support:
+#   python -m pip install -e ".[vcf]"
+#
+# Numba acceleration:
+#   python -m pip install -e ".[speed]"
+#
+# Full development/test environment:
+#   python -m pip install -e ".[all,test]"

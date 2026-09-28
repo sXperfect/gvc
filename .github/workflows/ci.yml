@@ -36,13 +36,24 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install Python 3.8 compatibility environment
+      - name: Install Python 3.8 core test environment
         run: |
           python -m pip install --upgrade "pip<25"
-          python -m pip install -e ".[all,test]"
+          python -m pip install -e ".[test]"
 
-      - name: Run canonical Python 3.8 gate
-        run: python scripts/ci.py all
+      - name: Verify Python 3.8 core-only installation
+        run: |
+          python scripts/ci.py metadata
+          python scripts/ci.py syntax
+          python scripts/ci.py native
+          python scripts/ci.py test
+          python scripts/ci.py cli
+
+      - name: Install Python 3.8 optional dependencies
+        run: python -m pip install -e ".[all]"
+
+      - name: Verify Python 3.8 optional dependency ceiling
+        run: python scripts/ci.py dependencies
 
       - name: Clean Python 3.8 native products
         run: |
