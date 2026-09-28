@@ -57,7 +57,7 @@ Hosted CI follows the credit-conscious pattern used by gunz-utils:
 
 Canonical local gate:
 
-    ./scripts/verify.sh
+    bash scripts/verify.sh
 
 ## Dependency policy
 
