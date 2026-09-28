@@ -52,10 +52,13 @@ def create_parameter_set(
 
     #? Handle the case where phasing matrix can be represented by a single value
     if p == 1 or phasing_matrix is None or np.all(~phasing_matrix) or np.all(phasing_matrix):
-        if phasing_matrix is None:
+        if p == 1 or phasing_matrix is None:
+            # Haploid genotypes have no phase separators. Keep the serialized
+            # phase value at the historical default rather than indexing the
+            # zero-width phase matrix returned by the VCF reader.
             phasing_value = 0
         else:
-            # First element is sufficient to represent the matrix
+            # First element is sufficient to represent the matrix.
             phasing_value = phasing_matrix[0,0]
 
         param_set = ParameterSet(
