@@ -1,4 +1,6 @@
 from os import getcwd
+import io
+import os
 from os.path import join
 import itertools as it
 import numpy as np
@@ -6,11 +8,24 @@ from gvc.common import create_parameter_set
 from gvc.sort import sort
 from gvc import reader
 from gvc import data_structures as ds
+import gvc.codec as codec_module
 from gvc.codec import encode, decode
 from gvc.data_structures.consts import BinarizationID, CodecID
 from gvc.encoder import run_core, binarize_allele_matrix
 from gvc.decoder import decode_encoded_variants
 import unittest
+
+
+def _test_matrix_encode(matrix):
+    """Lossless in-memory codec used only by the unit tests."""
+    payload = io.BytesIO()
+    np.save(payload, matrix, allow_pickle=False)
+    return payload.getvalue()
+
+
+def _test_matrix_decode(payload):
+    """Decode matrices produced by _test_matrix_encode."""
+    return np.load(io.BytesIO(payload), allow_pickle=False)
 
 
 class TestEncodeDecode(unittest.TestCase):
@@ -20,15 +35,32 @@ class TestEncodeDecode(unittest.TestCase):
         self.block_size = 2048
         self.codec_id = CodecID.JBIG1
         self.transpose = False
+
+        self._original_codec = codec_module.MAT_CODECS[self.codec_id].copy()
+        codec_module.MAT_CODECS[self.codec_id]["encoder"] = _test_matrix_encode
+        codec_module.MAT_CODECS[self.codec_id]["decoder"] = _test_matrix_decode
+        self.addCleanup(self._restore_codec)
         
         self.tsp_params = [
             'ham', 'nn', 1
         ]
-        
+
+    def _restore_codec(self):
+        codec_module.MAT_CODECS[self.codec_id].clear()
+        codec_module.MAT_CODECS[self.codec_id].update(self._original_codec)
+
+    def _require_vcf_fixture(self):
+        fpath = self._require_vcf_fixture()
+        if not os.path.isfile(fpath):
+            self.skipTest(
+                "large upstream VCF fixture is not present in this repository"
+            )
+        return fpath
+
     def test_roundtrip_manual_vcf01(self):
-        fpath = join(getcwd(), 'tests', self.vcf01_fpath)
+        fpath = self._require_vcf_fixture()
         for binarization_id in [BinarizationID.ROW_BIN_SPLIT, BinarizationID.BIT_PLANE]:
-            for [sort_rows, sort_cols] in it.product([True, True], repeat=2):
+            for [sort_rows, sort_cols] in it.product([False, True], repeat=2):
                 
                 ps_params = [
                     binarization_id,

@@ -1,5 +1,7 @@
 # Genomic Variant Codec (GVC)
 
+[![CI](https://github.com/sXperfect/gvc/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sXperfect/gvc/actions/workflows/ci.yml)
+
 Open Source Genotype Compressor
 
 ## Usage policy
@@ -17,7 +19,10 @@ We kindly ask to refrain from publishing analyses that were conducted using this
 ## Dependencies
 ---
 
-Both python version 3.7 or newer and CMAKE are required.
+GVC 1.0.x supports Python 3.8 or newer. CMake and a C/C++ compiler are
+required for the native components. Future minor release lines may raise the
+minimum Python version; older release lines remain available for legacy Python
+environments. See [docs/design/versioning.md](docs/design/versioning.md).
 For anaconda or conda user, CMAKE, gcc and gxx libraries are required and can be installed through: `conda install -c conda-forge cmake gxx_linux-64 gcc_linux-64`.
 See [requirements.txt](requirements.txt) for the list of required python libraries.
 <!-- For python version 3.6 or lower, an additional python package `dataclass` is required. -->
@@ -29,9 +34,14 @@ Clone this repository:
 
     git clone https://github.com/sXperfect/gvc
 
-Run setup script `setup.sh`
+For a development installation:
+
+    python -m pip install -e .
+
+Build all native components and run the local verification gate with:
 
     bash setup.sh
+    ./scripts/verify.sh
 
 This step will install and compile all dependencies automatically.
 <!-- This will create automaticaly a virtual environment with all dependencies installed located in `tmp/venv`.

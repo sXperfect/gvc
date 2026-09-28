@@ -1,0 +1,42 @@
+[build-system]
+requires = [
+    "setuptools>=68",
+    "wheel",
+    "Cython>=0.29.30,<3",
+    "numpy>=1.21,<1.24",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gvc"
+dynamic = ["version"]
+description = "Genomic Variant Codec"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+dependencies = [
+    "numpy>=1.21,<1.24",
+    "numba",
+    "cyvcf2",
+    "scipy",
+    "tspsolve",
+    "Pillow",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Operating System :: POSIX :: Linux",
+]
+
+[project.urls]
+Repository = "https://github.com/sXperfect/gvc"
+Upstream = "https://github.com/tnt-LUH/gvc"
+
+[tool.setuptools.dynamic]
+version = { attr = "gvc._version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gvc*"]

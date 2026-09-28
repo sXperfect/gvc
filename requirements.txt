@@ -1,5 +1,6 @@
-numpy==1.21
-cython==0.29.30
+# Runtime requirements for legacy/manual environments.
+# The canonical package metadata lives in pyproject.toml.
+numpy>=1.21,<1.24
 numba
 cyvcf2
 scipy

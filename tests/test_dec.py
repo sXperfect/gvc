@@ -1,22 +1,28 @@
-            "0/0\t0|1\t3/0",
-            "3|1\t0/2\t1|1",
-            "3|1\t0/2\t1|2",
-            "0/0\t0|1\t3/1",
-            "0/0\t.|.\t3/1",
-            
-from os import getcwd
-from os.path import join
-import itertools as it
-import numpy as np
-from gvc.common import create_parameter_set
-from gvc.sort import sort
-from gvc import reader
-from gvc import data_structures as ds
-from gvc.codec import encode, decode
-from gvc.data_structures.consts import BinarizationID, CodecID
-from gvc.encoder import run_core, binarize_allele_matrix
-from gvc.decoder import decode_encoded_variants
+import io
 import unittest
 
+from gvc.bitstream import BitstreamReader, BitstreamWriter
 
-class TestDecode(unittest.TestCase):
+
+class TestBitstream(unittest.TestCase):
+    def test_bit_roundtrip(self):
+        stream = io.BytesIO()
+        writer = BitstreamWriter(stream)
+        writer.write_bits(0b101, 3)
+        writer.write_bits(0b11, 2)
+        writer.flush()
+
+        stream.seek(0)
+        reader = BitstreamReader(stream)
+        self.assertEqual(reader.read_bits(3), 0b101)
+        self.assertEqual(reader.read_bits(2), 0b11)
+
+    def test_write_rejects_value_too_wide(self):
+        stream = io.BytesIO()
+        writer = BitstreamWriter(stream)
+        with self.assertRaises(ValueError):
+            writer.write_bits(0b100, 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
