@@ -1,43 +1,51 @@
 #include "data_structure.h"
 
-uint16_t decode_16bit_id(unsigned char *payload, size_t bit_idx, 
+static uint8_t bits_per_id(uint16_t num_ids)
+{
+    if (num_ids <= 1) {
+        return 0;
+    }
+
+    uint16_t max_id = (uint16_t)(num_ids - 1);
+    uint8_t bits = 0;
+    while (max_id != 0) {
+        ++bits;
+        max_id >>= 1;
+    }
+    return bits;
+}
+
+uint16_t decode_16bit_id(unsigned char *payload, size_t bit_idx,
                          uint8_t word_size, uint16_t mask)
 {
-    size_t byte_idx = bit_idx / 8;
-    size_t bit_in_byte_idx = bit_idx % 8;
-    uint32_t val = payload[byte_idx] << 16 | payload[byte_idx+1] << 8 | payload[byte_idx+2];
-    val >>= (24-word_size-bit_in_byte_idx);
-    return val & mask;
-}
-
-void decode_ids(unsigned char *payload, uint16_t* ids, uint16_t num_ids)
-{
-    // TODO: word_size is maximum 15
-    // TODO: Fix possible out-of-bound
-    uint8_t word_size = (uint8_t) log2(num_ids);
-    if (word_size > 8 || word_size < 8){
-
-        size_t bit_idx = 0;
-        uint16_t mask = (1<<word_size) - 1;
-        for (int i = 0; i< num_ids; i++){
-            ids[i] = decode_16bit_id(payload, bit_idx, word_size, mask);
-            bit_idx += word_size;
-        }
-    } else if (word_size == 8){
-        for (int i = 0; i< num_ids; i++){
-            ids[i] = (uint16_t) payload[i];
-        }
+    uint16_t value = 0;
+    for (uint8_t i = 0; i < word_size; ++i) {
+        const size_t current_bit = bit_idx + i;
+        const size_t byte_idx = current_bit / 8;
+        const uint8_t bit_in_byte = (uint8_t)(7 - (current_bit % 8));
+        value = (uint16_t)((value << 1) |
+                          ((payload[byte_idx] >> bit_in_byte) & 1u));
     }
+    return (uint16_t)(value & mask);
 }
 
-
-void decode_amax_vec(unsigned char *payload, uint8_t* amax, 
-                    uint16_t num_amax, uint8_t word_size)
+void decode_ids(unsigned char *payload, uint16_t *ids, uint16_t num_ids)
 {
+    if (num_ids == 0) {
+        return;
+    }
+
+    const uint8_t word_size = bits_per_id(num_ids);
+    if (word_size == 0) {
+        ids[0] = 0;
+        return;
+    }
+
+    const uint16_t mask = (uint16_t)((1u << word_size) - 1u);
     size_t bit_idx = 0;
-    uint16_t mask = (1<<word_size) - 1;
-    for (int i = 0; i< num_amax; i++){
-        amax[i] = decode_16bit_id(payload, bit_idx, word_size, mask);
+
+    for (uint16_t i = 0; i < num_ids; ++i) {
+        ids[i] = decode_16bit_id(payload, bit_idx, word_size, mask);
         bit_idx += word_size;
     }
 }
