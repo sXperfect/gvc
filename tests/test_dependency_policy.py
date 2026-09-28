@@ -2,6 +2,7 @@ import sys
 
 import numpy as np
 import scipy
+import pytest
 
 
 def _version_tuple(value):
@@ -31,8 +32,8 @@ def test_supported_interpreter_window():
 
 
 def test_optional_dependency_versions_match_python():
-    import cyvcf2
-    import numba
+    cyvcf2 = pytest.importorskip("cyvcf2")
+    numba = pytest.importorskip("numba")
 
     cyvcf2_version = _version_tuple(cyvcf2.__version__)
     numba_version = _version_tuple(numba.__version__)
