@@ -8,7 +8,7 @@ This file defines repository-specific operating rules for automated and human de
 2. .github/workflows/ci.yml and scripts/ci.py — hosted/local verification behavior.
 3. docs/development/python-support.md — interpreter compatibility policy.
 4. CHANGELOG.md — user-visible changes.
-5. LICENSE and NOTICE.md — licensing and provenance.
+5. docs/design/testing.md and docs/development/releases.md — test and release policy.\n6. CONTRIBUTING.md — contributor workflow.\n7. LICENSE and NOTICE.md — licensing and provenance.
 
 Historical material under docs/history/ is preserved for provenance and is not current operating policy.
 
