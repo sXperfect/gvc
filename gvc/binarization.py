@@ -446,7 +446,7 @@ def bin_bit_plane(matrix, axis=None, **kwargs):
 
     bit_planes = []
 
-    bit_depth = np.ceil(np.log2(matrix.max() + 1)).astype(gvc.common.ALLELE_DTYPE)
+    bit_depth = max(1, int(np.ceil(np.log2(int(matrix.max()) + 1))))
 
     for i_bit in range(bit_depth):
         bit_tensor = np.bitwise_and(matrix, int(2**i_bit)).astype(gvc.common.BIN_DTYPE)

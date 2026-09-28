@@ -53,7 +53,7 @@ def create_parameter_set(
         raise ValueError('Invalid binarization_id: {}'.format(binarization_id))
 
     #? Handle the case where phasing matrix can be represented by a single value
-    if p == 1 or np.all(~phasing_matrix) or np.all(phasing_matrix):
+    if p == 1 or phasing_matrix is None or np.all(~phasing_matrix) or np.all(phasing_matrix):
         if phasing_matrix is None:
             phasing_value = 0
         else:
