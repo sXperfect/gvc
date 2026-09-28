@@ -8,8 +8,10 @@ from ..bitstream import BitstreamReader, BitIO
 class VectorAMax(object):
     def __init__(self, vector):
 
-        assert vector.ndim == 1
-        assert np.all(vector != 0)
+        if vector.ndim != 1:
+            raise ValueError("AMax vector must be one-dimensional")
+        if not np.all(vector != 0):
+            raise ValueError("AMax vector entries must be non-zero")
 
         self.vector = vector
 
