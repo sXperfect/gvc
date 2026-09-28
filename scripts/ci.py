@@ -55,7 +55,7 @@ def metadata_gate():
         '"numba>=0.58.1"',
         '"Pillow>=10.4.0"',
         '"pytest>=8.3.5"',
-        '"Cython>=3.2.8"',
+        '"Cython>=3.2.9"',
     )
     missing = [fragment for fragment in required_fragments if fragment not in pyproject]
     if missing:

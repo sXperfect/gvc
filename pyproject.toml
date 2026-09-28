@@ -2,7 +2,7 @@
 requires = [
     "setuptools>=68",
     "wheel>=0.45.1",
-    "Cython>=3.2.8",
+    "Cython>=3.2.9",
     "numpy>=1.24.4",
 ]
 build-backend = "setuptools.build_meta"
@@ -53,9 +53,11 @@ all = [
 ]
 test = [
     "pytest>=8.3.5",
+    "Cython>=3.2.9",
 ]
 dev = [
     "pytest>=8.3.5",
+    "Cython>=3.2.9",
     "ruff>=0.15.12",
 ]
 

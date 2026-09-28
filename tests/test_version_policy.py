@@ -24,7 +24,7 @@ def test_v1_0_dependency_floors_match_latest_python38_generation():
     assert '"cyvcf2>=0.33.0"' in metadata
     assert '"numba>=0.58.1"' in metadata
     assert '"Pillow>=10.4.0"' in metadata
-    assert '"pytest>=8.3.5"' in metadata
+    assert '"pytest>=8.3.5"' in metadata\n    assert '"Cython>=3.2.9"' in metadata
 
 
 def test_obsolete_tspsolve_is_not_a_dependency():

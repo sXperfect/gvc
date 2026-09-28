@@ -34,6 +34,7 @@ installed on Python 3.8 as its lower bound:
 - Numba >= 0.58.1 for optional acceleration
 - Pillow >= 10.4.0 for the optional JBIG integration example
 - pytest >= 8.3.5 for tests
+- Cython >= 3.2.9 for builds/tests
 
 There are intentionally no global upper pins for these runtime/test
 dependencies. pip uses each dependency's own `Requires-Python` metadata to

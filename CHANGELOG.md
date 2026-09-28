@@ -15,6 +15,8 @@ All notable changes to this repository will be documented here.
 
 ### Changed
 
+- GVC 1.0.x uses Cython 3.2.9 as its Python-3.8 build baseline while newer
+  interpreters can resolve Cython 3.3+.
 - GVC 1.0.x now starts from the newest scientific-stack generation compatible
   with Python 3.8: NumPy 1.24.4 and SciPy 1.10.1.
 - Optional VCF, acceleration, and JBIG-example dependencies use modern lower
