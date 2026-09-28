@@ -61,6 +61,7 @@ def metadata_gate():
         '"Pillow>=10.4.0,<13"',
         '"pytest>=8.3.5,<10"',
         '"Cython>=3.2.9,<4"',
+        '"build>=1.2.2.post1,<2"',
     )
     missing = [item for item in required if item not in text]
     if missing:
@@ -168,7 +169,8 @@ def _install_and_smoke_artifact(artifact, name):
         "print('gvc origin:', origin); "
         "print('gvc version:', md.version('gvc')); "
         "assert md.version('gvc') == gvc.__version__; "
-        "assert " + repr(str(ROOT)) + " not in str(origin)"
+        "source = Path(" + repr(str(ROOT / "gvc")) + ").resolve(); "
+        "assert source != origin and source not in origin.parents"
     )
     status = _run_external([py, "-c", code], cwd=outside, env=env)
     if status:
