@@ -401,27 +401,39 @@ def _get_tensor_shape(
 
         shapes.append((bin_mat_nrows, bin_mat_ncols))
 
+    if not shapes:
+        raise ValueError("genotype payload does not contain variant matrices")
+
     nrows, ncols = shapes[0]
     for shape in shapes[1:]:
-        assert nrows == shape[0]
-        assert ncols == shape[1]
+        if shape != (nrows, ncols):
+            raise ValueError("encoded variant matrix shapes are inconsistent")
+
+    if nrows <= 0 or ncols <= 0:
+        raise ValueError("encoded matrix dimensions must be positive")
 
     if param_set.binarization_id == consts.BinarizationID.BIT_PLANE:
-
         if param_set.concat_axis == 0:
-            nrows = nrows // param_set.num_bin_mat
+            if nrows % param_set.num_bin_mat:
+                raise ValueError("bit-plane row dimension is not divisible by plane count")
+            nrows //= param_set.num_bin_mat
         elif param_set.concat_axis == 1:
-            ncols = ncols // param_set.num_bin_mat
+            if ncols % param_set.num_bin_mat:
+                raise ValueError("bit-plane column dimension is not divisible by plane count")
+            ncols //= param_set.num_bin_mat
 
     elif param_set.binarization_id == consts.BinarizationID.ROW_BIN_SPLIT:
-        vector_amax = ds.VectorAMax.from_bytes(enc_var.variants_amax_payload.read()).vector
-        nrows += int(np.sum(vector_amax[vector_amax != 1]))
+        vector_amax = ds.VectorAMax.from_bytes(
+            enc_var.variants_amax_payload.read()
+        ).vector
+        # Row-bin splitting expands each original row into bit-length rows.
+        # The AMax vector has exactly one entry per original variant row.
+        nrows = len(vector_amax)
 
-    tensor_nrows = nrows
-    tensor_ncols = ncols // param_set.p
-    tensor_nchannels = param_set.p
+    if ncols % param_set.p:
+        raise ValueError("allele column count is not divisible by ploidy")
 
-    return (tensor_nrows, tensor_ncols, tensor_nchannels)
+    return (nrows, ncols // param_set.p, param_set.p)
 
 class DecoderContext(object):
     def __init__(self):
