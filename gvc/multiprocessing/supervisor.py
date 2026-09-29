@@ -254,27 +254,39 @@ class EncodeProcessSupervisor:
             )
         return self._writer_total
 
+    @staticmethod
+    def _started(proc):
+        return getattr(proc, "pid", None) is not None
+
     def cancel(self):
         self.stop_event.set()
         deadline = time.monotonic() + self.graceful_timeout
         for proc in self.processes:
+            if not self._started(proc):
+                continue
             remaining = max(0.0, deadline - time.monotonic())
             proc.join(timeout=remaining)
 
         for proc in self.processes:
-            if proc.is_alive():
+            if self._started(proc) and proc.is_alive():
                 proc.terminate()
         for proc in self.processes:
-            proc.join(timeout=1.0)
+            if self._started(proc):
+                proc.join(timeout=1.0)
 
         for proc in self.processes:
-            if proc.is_alive() and hasattr(proc, "kill"):
+            if (
+                self._started(proc)
+                and proc.is_alive()
+                and hasattr(proc, "kill")
+            ):
                 proc.kill()
                 proc.join(timeout=1.0)
 
     def join(self):
         for proc in self.processes:
-            proc.join()
+            if self._started(proc):
+                proc.join()
 
     def cleanup_ipc(self):
         for q in self.queues + [self.error_q, self.status_q]:
@@ -354,8 +366,8 @@ class EncodeProcessSupervisor:
 
     def run(self):
         self.cleanup_temp()
-        self.start()
         try:
+            self.start()
             count = self.wait()
             self.join()
             self.commit()

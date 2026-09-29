@@ -333,6 +333,8 @@ def test_encoder_exposes_supervisor_configuration(tmp_path):
     )
     assert encoder.multiprocessing_start_method == "spawn"
     assert encoder.multiprocessing_stall_timeout == 30
+    assert encoder.multiprocessing_initializer is None
+    assert encoder.multiprocessing_initializer_args == ()
 
 
 
@@ -463,7 +465,7 @@ def test_spawn_initializer_failure_is_structured(tmp_path):
 
     # A nested initializer is intentionally not picklable under spawn. The
     # parent should fail without publishing a partial final artifact.
-    with pytest.raises((AttributeError, TypeError)):
+    with pytest.raises(TypeError, match="picklable"):
         run_multiprocessing(
             str(VCF_FIXTURE),
             str(tmp_path / "unpicklable.gvc"),

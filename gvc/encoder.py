@@ -4,6 +4,7 @@ import copy as cp
 import logging as log
 import multiprocessing as mp
 import os
+import pickle
 import queue
 import uuid
 
@@ -247,6 +248,14 @@ def run_multiprocessing(
         process_initializer_args = ()
     else:
         process_initializer_args = tuple(process_initializer_args)
+
+    if start_method == "spawn" and process_initializer is not None:
+        try:
+            pickle.dumps((process_initializer, process_initializer_args))
+        except Exception as exc:
+            raise TypeError(
+                "spawn process_initializer and arguments must be picklable"
+            ) from exc
 
     context = (
         mp.get_context(start_method)
