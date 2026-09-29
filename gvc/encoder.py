@@ -212,7 +212,7 @@ class Encoder(object):
         max_cols=None,
         dist='ham',
         solver='nn',
-        codec_name:str="jbig1",
+        codec_name:str="jbig",
         preset_mode=1,
         num_threads=0,
     ):

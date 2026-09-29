@@ -115,3 +115,13 @@ def test_decoder_rejects_truncated_complete_file(framed_test_codec, tmp_path):
         with pytest.raises((EOFError, ValueError, TypeError)):
             decoder = Decoder(str(damaged))
             decoder._f.close()
+
+
+
+def test_encoder_default_codec_name_is_registered(tmp_path):
+    encoder = Encoder(
+        str(VCF_FIXTURE),
+        str(tmp_path / "default.gvc"),
+        num_threads=0,
+    )
+    assert encoder.codec_id == CodecID.JBIG1
