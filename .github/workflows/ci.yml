@@ -65,6 +65,28 @@ jobs:
           GVC_HISTORICAL_FIXTURE="$PWD/tmp/historical/test_block01.vcf.gz" \
           GVC_HISTORICAL_MAX_BLOCKS=1 \
             python scripts/ci.py all
+          python benchmarks/run_release.py \
+            tests/fixtures/tiny_diploid.vcf \
+            --workers 0 2 \
+            --repetitions 1 \
+            --block-size 1 \
+            --output tmp/benchmark-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("tmp/benchmark-smoke.json").read_text())
+          assert report["schema_version"] == 1
+          assert len(report["configurations"]) == 2
+          for config in report["configurations"]:
+              assert config["variants"] == 3
+              assert config["encode_seconds"] >= 0
+              assert config["decode_seconds"] >= 0
+              assert config["total_gvc_bytes"] > 0
+              assert config["decoded_gt_bytes"] > 0
+              assert config["decoded_gt_to_total_gvc_ratio"] > 0
+              assert config["peak_rss_kib_self"] > 0
+          PY
           python scripts/ci.py optional
           deactivate
 

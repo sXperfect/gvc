@@ -79,6 +79,7 @@ def syntax_gate():
     ok = compileall.compile_dir(str(ROOT / "gvc"), quiet=1)
     ok = compileall.compile_dir(str(ROOT / "tests"), quiet=1) and ok
     ok = compileall.compile_dir(str(ROOT / "scripts"), quiet=1) and ok
+    ok = compileall.compile_dir(str(ROOT / "benchmarks"), quiet=1) and ok
     return 0 if ok else 1
 
 

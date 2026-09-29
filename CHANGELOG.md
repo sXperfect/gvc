@@ -32,6 +32,10 @@ All notable changes to this repository will be documented here.
   timeout/error validation, and real codec release-gate tests.
 - A pinned historical LUH VCF compatibility gate sourced from upstream commit
   f9af2127a2ff0b87727924860e33f1905fd507cd.
+- An isolated release benchmark harness for encode/decode throughput, peak RSS,
+  storage size, and random-access latency.
+- Bounded real-JBIG multiprocessing queue-pressure and random-access release
+  regressions.
 - Complete file-level Encoder/Decoder regression coverage for bit-plane,
   row-bin-split, and haploid VCF inputs.
 - Random-access index, BinMat framing, and standalone libgvc safety tests.
