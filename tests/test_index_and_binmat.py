@@ -66,7 +66,6 @@ def test_index_validates_metadata_and_row_positions(tmp_path):
     np.save(tmp_path / "0.npy", np.array([100, 110, 120], dtype=np.uint64))
 
     index = Index(str(tmp_path), _decoder_context([object()]))
-    assert index.get_row_mask(105, 1, 2) if False else True
     row_slice = index.get_row_mask(0, 105, 120)
     assert (row_slice.start, row_slice.stop) == (1, 3)
 
