@@ -33,14 +33,22 @@ def _load_library():
         )
 
     lib = ct.cdll.LoadLibrary(str(path))
-    lib.decode_ids.argtypes = [
+    lib.decode_ids_checked.argtypes = [
         ct.POINTER(ct.c_uint8),
+        ct.c_size_t,
         ct.POINTER(ct.c_uint16),
         ct.c_uint16,
     ]
-    lib.decode_ids.restype = None
+    lib.decode_ids_checked.restype = ct.c_int
     _LIBDS = lib
     return lib
+
+
+def _required_payload_bytes(num_entries):
+    if num_entries <= 1:
+        return 0
+    bits_per_id = (num_entries - 1).bit_length()
+    return (num_entries * bits_per_id + 7) // 8
 
 
 def decode_rowcolids(payload, num_entries):
@@ -50,6 +58,14 @@ def decode_rowcolids(payload, num_entries):
         raise ValueError("num_entries is outside the libgvc uint16 range")
 
     payload = bytes(payload)
+    required = _required_payload_bytes(num_entries)
+    if len(payload) < required:
+        raise ValueError(
+            "permutation payload is truncated: expected at least {}, got {}".format(
+                required, len(payload)
+            )
+        )
+
     recon_ids = np.zeros(num_entries, dtype=np.uint16)
     recon_ids_ptr = recon_ids.ctypes.data_as(ct.POINTER(ct.c_uint16))
 
@@ -60,5 +76,18 @@ def decode_rowcolids(payload, num_entries):
         payload_buffer = None
         payload_ptr = ct.POINTER(ct.c_uint8)()
 
-    _load_library().decode_ids(payload_ptr, recon_ids_ptr, num_entries)
+    status = _load_library().decode_ids_checked(
+        payload_ptr,
+        len(payload),
+        recon_ids_ptr,
+        num_entries,
+    )
+    if status == -1:
+        raise RuntimeError("libgvc received an invalid output buffer")
+    if status == -2:
+        raise ValueError("permutation payload is truncated")
+    if status == -3:
+        raise ValueError("permutation id is outside the valid range")
+    if status != 0:
+        raise RuntimeError("libgvc decode failed with status {}".format(status))
     return recon_ids

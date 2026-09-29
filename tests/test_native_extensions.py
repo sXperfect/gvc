@@ -170,3 +170,49 @@ def test_cquery_rejects_nonpositive_ploidy():
     query = np.array([1, 3], dtype=np.uint32)
     with np.testing.assert_raises_regex(ValueError, "greater than zero"):
         cquery.cget_col_ids(query, 0)
+
+
+
+def test_ctypes_libgvc_permutation_decoder_matches_python_reference(monkeypatch):
+    from pathlib import Path
+
+    from gvc import libds
+
+    library = Path(__file__).resolve().parents[1] / "tmp" / "libgvc-build" / "libds.so"
+    if not library.is_file():
+        import pytest
+        pytest.skip("standalone libgvc has not been built")
+
+    monkeypatch.setenv("GVC_LIBDS_PATH", str(library))
+    monkeypatch.setattr(libds, "_LIBDS", None)
+
+    rng = np.random.default_rng(3821)
+    for size in (1, 2, 3, 4, 7, 8, 15, 16, 31, 255):
+        permutation = rng.permutation(size).astype(np.uint16)
+        payload = RowColIds(permutation).to_bytes()
+        restored = libds.decode_rowcolids(payload, size)
+        np.testing.assert_array_equal(restored, permutation)
+
+
+def test_ctypes_libgvc_rejects_truncated_and_invalid_payload(monkeypatch):
+    from pathlib import Path
+
+    import pytest
+
+    from gvc import libds
+
+    library = Path(__file__).resolve().parents[1] / "tmp" / "libgvc-build" / "libds.so"
+    if not library.is_file():
+        pytest.skip("standalone libgvc has not been built")
+
+    monkeypatch.setenv("GVC_LIBDS_PATH", str(library))
+    monkeypatch.setattr(libds, "_LIBDS", None)
+
+    permutation = np.array([2, 0, 3, 1], dtype=np.uint16)
+    payload = RowColIds(permutation).to_bytes()
+    with pytest.raises(ValueError, match="truncated"):
+        libds.decode_rowcolids(payload[:-1], len(permutation))
+
+    # For three entries, two bits are used per id; value 3 is outside 0..2.
+    with pytest.raises(ValueError, match="valid range"):
+        libds.decode_rowcolids(bytes([0b11000000]), 3)
