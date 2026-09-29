@@ -17,6 +17,14 @@ from tests.test_file_roundtrip import (
 
 
 def test_multiprocessing_encoder_matches_single_process(monkeypatch, tmp_path):
+    # The hosted Linux gate uses fork, so the test codec registry is inherited
+    # by worker processes. Process-free ordering tests below remain portable
+    # and cover the writer protocol independently of the start method.
+    import multiprocessing as mp
+
+    if mp.get_start_method() != "fork":
+        pytest.skip("real multiprocessing codec test requires fork start method")
+
     codec = MAT_CODECS[CodecID.JBIG1]
     monkeypatch.setitem(codec, "encoder", mp_encode)
     monkeypatch.setitem(codec, "decoder", mp_decode)
