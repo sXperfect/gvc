@@ -216,3 +216,32 @@ def test_ctypes_libgvc_rejects_truncated_and_invalid_payload(monkeypatch):
     # For three entries, two bits are used per id; value 3 is outside 0..2.
     with pytest.raises(ValueError, match="valid range"):
         libds.decode_rowcolids(bytes([0b11000000]), 3)
+
+
+
+def test_ctypes_libgvc_rejects_duplicate_and_trailing_payload(monkeypatch):
+    from pathlib import Path
+
+    import pytest
+
+    from gvc import libds
+
+    library = (
+        Path(__file__).resolve().parents[1]
+        / "tmp"
+        / "libgvc-build"
+        / "libds.so"
+    )
+    if not library.is_file():
+        pytest.skip("standalone libgvc has not been built")
+
+    monkeypatch.setenv("GVC_LIBDS_PATH", str(library))
+    monkeypatch.setattr(libds, "_LIBDS", None)
+
+    with pytest.raises(ValueError, match="duplicate"):
+        libds.decode_rowcolids(bytes([0b00000100]), 3)
+
+    permutation = np.array([2, 0, 3, 1], dtype=np.uint16)
+    payload = RowColIds(permutation).to_bytes()
+    with pytest.raises(ValueError, match="trailing"):
+        libds.decode_rowcolids(payload + b"\x00", len(permutation))

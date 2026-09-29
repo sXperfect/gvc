@@ -110,66 +110,120 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
     vcf_f = VCF(fpath, strict_gt=True, gts012=True, threads=2)
     num_samples = len(vcf_f.samples)
 
-    metadata_dpath = join("{}{}".format(out_fpath, ".metadata")) if out_fpath is not None else None
+    metadata_dpath = (
+        join("{}{}".format(out_fpath, ".metadata"))
+        if out_fpath is not None
+        else None
+    )
     meta_handler = MetaHandler(vcf_f, metadata_dpath, block_size)
     meta_handler.init()
 
+    def allocate_block(ploidy):
+        allele = np.empty(
+            (block_size, num_samples, ploidy),
+            dtype=gvc.common.SIGNED_ALLELE_DTYPE,
+        )
+        if ploidy == 1:
+            phase = np.empty((block_size, 0), dtype=bool)
+        else:
+            phase = np.empty(
+                (block_size, num_samples, ploidy - 1),
+                dtype=bool,
+            )
+        meta_handler.init_block()
+        return allele, phase
+
+    def finalize_block(allele, phase, n_rows, ploidy, block_id):
+        allele_block, missing_rep_val, na_rep_val = (
+            gvc.binarization.adaptive_max_value(allele[:n_rows])
+        )
+        allele_block = reshape_trans_mat(allele_block, 1)
+
+        phase_block = phase[:n_rows]
+        if ploidy > 1:
+            phase_block = reshape_trans_mat(phase_block, 1)
+
+        meta_handler.proc_block(block_id, n_rows)
+        return (
+            allele_block,
+            phase_block,
+            ploidy,
+            missing_rep_val,
+            na_rep_val,
+        )
+
     i_var = 0
-    stime = time.time()
-    p = 0
     block_id = 0
+    current_p = None
+    allele_matrix = None
+    phase_matrix = None
 
-    for variant in iter(vcf_f):
-        p = variant.ploidy
-        if i_var == 0:
-            allele_matrix = np.empty(
-                (block_size, num_samples, p), dtype=gvc.common.SIGNED_ALLELE_DTYPE
-            )
-            if p == 1:
-                phase_matrix = np.empty((block_size, 0), dtype=bool)
-            else:
-                phase_matrix = np.empty(
-                    (block_size, num_samples, p - 1), dtype=bool
+    try:
+        for variant in iter(vcf_f):
+            variant_p = int(variant.ploidy)
+            if variant_p <= 0:
+                raise ValueError("VCF genotype ploidy must be greater than zero")
+
+            # A ParameterSet carries one ploidy value. If ploidy changes before
+            # block_size is reached, close the current block so the encoder can
+            # emit a new ParameterSet rather than mixing incompatible shapes.
+            if i_var and variant_p != current_p:
+                yield finalize_block(
+                    allele_matrix,
+                    phase_matrix,
+                    i_var,
+                    current_p,
+                    block_id,
                 )
-            meta_handler.init_block()
+                block_id += 1
+                i_var = 0
 
-        meta_handler.proc_var(i_var, variant)
-        genotypes = variant.genotype.array()
-        allele_matrix[i_var, :, :] = genotypes[:, :p]
-        if p > 1:
-            # cyvcf2 uses True for "|" while GVC serializes 0 for "|" and
-            # 1 for "/". Convert at the ingestion boundary so every internal
-            # path uses the same phase convention as split_genotype_matrix().
-            phase_matrix[i_var, :, :] = np.logical_not(genotypes[:, p:])
+            if i_var == 0:
+                current_p = variant_p
+                allele_matrix, phase_matrix = allocate_block(current_p)
 
-        i_var += 1
-        if i_var == block_size:
-            log.debug("Parsing time: %.03f", time.time() - stime)
-            allele_matrix, missing_rep_val, na_rep_val = gvc.binarization.adaptive_max_value(
-                allele_matrix
+            meta_handler.proc_var(i_var, variant)
+            genotypes = variant.genotype.array()
+            if genotypes.ndim != 2 or genotypes.shape[0] != num_samples:
+                raise ValueError("unexpected cyvcf2 genotype array shape")
+            required_columns = current_p + (1 if current_p > 1 else 0)
+            if genotypes.shape[1] < required_columns:
+                raise ValueError(
+                    "cyvcf2 genotype array does not contain the expected "
+                    "allele/phasing columns"
+                )
+
+            allele_matrix[i_var, :, :] = genotypes[:, :current_p]
+            if current_p > 1:
+                # cyvcf2 uses True for "|" while GVC serializes 0 for "|" and
+                # 1 for "/". A single cyvcf2 phase flag is broadcast across
+                # separators for polyploid calls, matching the historical GVC
+                # convention.
+                phase_matrix[i_var, :, :] = np.logical_not(
+                    genotypes[:, current_p:]
+                )
+
+            i_var += 1
+            if i_var == block_size:
+                yield finalize_block(
+                    allele_matrix,
+                    phase_matrix,
+                    i_var,
+                    current_p,
+                    block_id,
+                )
+                block_id += 1
+                i_var = 0
+
+        if i_var:
+            yield finalize_block(
+                allele_matrix,
+                phase_matrix,
+                i_var,
+                current_p,
+                block_id,
             )
-            allele_matrix = reshape_trans_mat(allele_matrix, 1)
-            if p > 1:
-                phase_matrix = reshape_trans_mat(phase_matrix, 1)
-            else:
-                phase_matrix = phase_matrix[:block_size]
-            meta_handler.proc_block(block_id)
-            yield allele_matrix, phase_matrix, p, missing_rep_val, na_rep_val
-            i_var = 0
-            block_id += 1
-            stime = time.time()
-
-    vcf_f.close()
-    if i_var == 0:
-        return
-
-    suballele_matrix, missing_rep_val, na_rep_val = gvc.binarization.adaptive_max_value(
-        allele_matrix[:i_var, :]
-    )
-    subphase_matrix = phase_matrix[:i_var]
-    suballele_matrix = reshape_trans_mat(suballele_matrix, 1)
-    if p > 1:
-        subphase_matrix = reshape_trans_mat(subphase_matrix, 1)
-    meta_handler.proc_block(block_id, i_var)
-    meta_handler.end()
-    yield suballele_matrix, subphase_matrix, p, missing_rep_val, na_rep_val
+    finally:
+        vcf_f.close()
+        # This must also run when the final block exactly fills block_size.
+        meta_handler.end()

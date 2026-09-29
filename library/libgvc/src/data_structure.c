@@ -40,14 +40,18 @@ int decode_ids_checked(const unsigned char *payload, size_t payload_len,
     size_t bit_idx = 0;
     uint16_t mask;
     uint16_t i;
+    uint8_t seen[8192] = {0};
 
     if (num_ids == 0) {
-        return 0;
+        return payload_len == 0 ? 0 : -5;
     }
     if (ids == NULL) {
         return -1;
     }
     if (num_ids == 1) {
+        if (payload_len != 0) {
+            return -5;
+        }
         ids[0] = 0;
         return 0;
     }
@@ -58,15 +62,29 @@ int decode_ids_checked(const unsigned char *payload, size_t payload_len,
     if (payload == NULL || payload_len < required_bytes) {
         return -2;
     }
+    if (payload_len > required_bytes) {
+        return -5;
+    }
 
     mask = (uint16_t)((1U << word_size) - 1U);
     for (i = 0; i < num_ids; i++) {
         uint16_t value = decode_16bit_id(
             (unsigned char *)payload, bit_idx, word_size, mask
         );
+        uint16_t seen_byte;
+        uint8_t seen_mask;
+
         if (value >= num_ids) {
             return -3;
         }
+
+        seen_byte = (uint16_t)(value >> 3);
+        seen_mask = (uint8_t)(1U << (value & 7U));
+        if ((seen[seen_byte] & seen_mask) != 0U) {
+            return -4;
+        }
+        seen[seen_byte] |= seen_mask;
+
         ids[i] = value;
         bit_idx += word_size;
     }

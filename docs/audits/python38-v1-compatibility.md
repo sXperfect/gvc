@@ -13,7 +13,8 @@ The maintained test suite now covers:
 - reviewed latest Python 3.8 dependency stack plus an unconstrained resolver
   probe;
 - byte-exact v1 golden serialization for parameter sets, permutations, AMax,
-  blocks, access units, and a complete structural .gvc fixture;
+  blocks, access units, and multiple structural golden .gvc shapes covering
+  row-bin-split, missing/NA values, mixed phase payloads, and sorted multi-plane data;
 - exhaustive truncation rejection for the structural golden fixture;
 - malformed sizes, IDs, flags, payload lengths, permutation values, and
   bitstream boundaries;
@@ -21,12 +22,16 @@ The maintained test suite now covers:
   crc_id, and the standalone libgvc permutation helper;
 - generated encode/decode cases across ploidy 1-4, phase modes, missing/NA
   values, sorting, transpose, and both binarization schemes;
-- tiny diploid and haploid VCF fixtures, including mixed phasing,
-  multiallelic calls, missing genotypes, partial final blocks, and block
-  boundaries;
+- tiny diploid, haploid, and mixed-ploidy VCF fixtures, including mixed
+  phasing, multiallelic calls, missing genotypes, partial final blocks, exact
+  block boundaries, and ploidy-driven ParameterSet transitions;
 - complete Encoder -> .gvc -> Decoder file round trips for bit-plane,
-  row-bin-split, and haploid data using a deterministic JBIG-header-compatible
-  in-memory codec;
+  row-bin-split, haploid, and mixed-ploidy data using a deterministic
+  JBIG-header-compatible in-memory codec;
+- end-to-end random-access tests for genomic intervals, sample-only selection,
+  empty in-block intervals, and metadata sidecars;
+- deterministic two-worker multiprocessing encode parity against sequential
+  output, isolated behind a subprocess timeout;
 - wheel and sdist build/install isolation from outside the source checkout;
 - installed native-extension imports and installed CLI startup.
 
@@ -66,10 +71,10 @@ suite and should be performed before declaring a production 1.0.x release:
    in-memory codec and do not validate a third-party JBIG binary.
 3. Run the historical large VCF fixtures (including test_block01.vcf.gz) and
    compare reconstructed genotypes against the source data.
-4. Exercise random-access queries against real metadata sidecars for genomic
-   intervals and sample subsets at realistic scale.
-5. Exercise the multiprocessing encoder path with multiple workers and verify
-   deterministic block ordering and clean worker termination.
+4. Exercise random-access queries against real production-scale metadata
+   sidecars; hosted CI covers the same behavior on deterministic tiny fixtures.
+5. Stress the multiprocessing encoder beyond the hosted deterministic two-worker
+   parity test, including worker failures, high queue pressure, and large inputs.
 6. Stress very large matrices/block counts near serialized field-size
    boundaries and monitor memory use.
 7. Run native builds on any production platforms beyond the Linux CI target,

@@ -609,47 +609,53 @@ class Decoder(object):
 
                 log.info("Decoding time:{:.3f}".format(t.time))
 
-    def random_access(self,
-        pos:t.List,
-        samples:str
-    ):
+    def random_access(self, pos, samples):
+        if self.index is None:
+            raise ValueError(
+                "random access requires the .metadata sidecar produced during encoding"
+            )
 
-        start_pos, end_pos = pos        
-        assert start_pos <= end_pos, "Genomic start position must be less or equal to end position"
         query_col_ids = self.index.query_columns(samples)
 
-        #? Query block and parameter set id given position
-        blk_ps_id_pairs = self.index.query_blk(start_pos, end_pos)
-
-        if blk_ps_id_pairs.shape[0]:
-
-            for i_block in range(blk_ps_id_pairs.shape[0]):
-                block_id, block, param_set_id = blk_ps_id_pairs[i_block, :]
-
-                row_slice = self.index.get_row_mask(block_id, start_pos, end_pos)
-                if row_slice.start < row_slice.stop:
-                    param_set = self.decoder_context.parameter_sets[param_set_id]
-
-                    out = decode_encoded_variants(
-                        param_set,
-                        block.block_payload,
-                        row_slice,
-                        query_col_ids
-                    )
-
-                #? No variant found given POSs
-                else:
-                    pass
-                
-                try:
-                    self._out_f.write(out)
-                except AttributeError:
-                    print(out)
-
-        #? No block found given POSs
+        if pos is None:
+            blk_ps_id_pairs = self.index.root_lookup
         else:
-            return None
-        
+            if not isinstance(pos, (list, tuple)) or len(pos) != 2:
+                raise ValueError("pos must contain exactly start and end positions")
+            start_pos, end_pos = pos
+            if start_pos > end_pos:
+                raise ValueError(
+                    "genomic start position must be less than or equal to end position"
+                )
+            blk_ps_id_pairs = self.index.query_blk(start_pos, end_pos)
+
+        for i_block in range(blk_ps_id_pairs.shape[0]):
+            block_id, block, param_set_id = blk_ps_id_pairs[i_block, :]
+
+            if pos is None:
+                row_slice = None
+            else:
+                row_slice = self.index.get_row_mask(
+                    int(block_id), start_pos, end_pos
+                )
+                # A block's min/max interval may overlap a query even when no
+                # variant lies inside the requested sub-interval.
+                if row_slice.start >= row_slice.stop:
+                    continue
+
+            param_set = self.decoder_context.parameter_sets[param_set_id]
+            out = decode_encoded_variants(
+                param_set,
+                block.block_payload,
+                row_slice,
+                query_col_ids,
+            )
+
+            if self._out_f is not None:
+                self._out_f.write(out)
+            else:
+                print(out, end="")
+
     def compare(self,
         orig_fpath
     ):

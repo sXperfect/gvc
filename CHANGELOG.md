@@ -22,6 +22,9 @@ All notable changes to this repository will be documented here.
 - Python 3.8 wheel and sdist build/install smoke tests from outside the source checkout.
 - Python 3.8 wheel/sdist build-and-install isolation gate with native-extension and installed-CLI smoke tests.
 - Explicit source-distribution manifest for the Cython `.pyx` build sources.
+- Additional byte-exact v1 structural fixtures for row-bin-split/missing values,
+  mixed phase payloads, and sorted multi-plane payloads.
+- End-to-end random-access and multiprocessing parity regressions.
 - Complete file-level Encoder/Decoder regression coverage for bit-plane,
   row-bin-split, and haploid VCF inputs.
 - Random-access index, BinMat framing, and standalone libgvc safety tests.
@@ -53,4 +56,9 @@ All notable changes to this repository will be documented here.
 - Row-bin-split shape reconstruction and haploid phase handling are corrected.
 - `BinMat` now writes and reads its matrix payload rather than dimensions only.
 - The standalone C permutation bridge uses a length-aware checked decoder.
+- VCF ingestion now finalizes metadata on exact block boundaries and splits
+  blocks when ploidy changes, preserving one ploidy per ParameterSet.
+- Random access handles sample-only queries and empty intervals deterministically.
+- The standalone ctypes/C permutation decoder now rejects duplicate IDs and
+  trailing payload bytes just like the Python reference implementation.
 - VCF and Numba integrations are lazy/optional rather than mandatory imports.

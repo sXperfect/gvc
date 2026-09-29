@@ -59,9 +59,15 @@ def decode_rowcolids(payload, num_entries):
 
     payload = bytes(payload)
     required = _required_payload_bytes(num_entries)
-    if len(payload) < required:
+    if len(payload) != required:
+        if len(payload) < required:
+            raise ValueError(
+                "permutation payload is truncated: expected {}, got {}".format(
+                    required, len(payload)
+                )
+            )
         raise ValueError(
-            "permutation payload is truncated: expected at least {}, got {}".format(
+            "permutation payload contains trailing bytes: expected {}, got {}".format(
                 required, len(payload)
             )
         )
@@ -88,6 +94,10 @@ def decode_rowcolids(payload, num_entries):
         raise ValueError("permutation payload is truncated")
     if status == -3:
         raise ValueError("permutation id is outside the valid range")
+    if status == -4:
+        raise ValueError("permutation payload contains duplicate ids")
+    if status == -5:
+        raise ValueError("permutation payload contains trailing bytes")
     if status != 0:
         raise RuntimeError("libgvc decode failed with status {}".format(status))
     return recon_ids
