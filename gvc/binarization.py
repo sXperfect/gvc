@@ -268,8 +268,10 @@ def reconstruct_genotype_matrix(allele_matrix, phasing_matrix, p):
 def adaptive_max_value(allele_matrix):
 
     allele_matrix = np.asarray(allele_matrix)
-    if allele_matrix.ndim != 2:
-        raise ValueError("allele matrix must be two-dimensional")
+    if allele_matrix.ndim not in (2, 3):
+        raise ValueError(
+            "allele data must be a two- or three-dimensional array"
+        )
     if allele_matrix.size == 0:
         raise ValueError("allele matrix must not be empty")
     if not np.issubdtype(allele_matrix.dtype, np.signedinteger):

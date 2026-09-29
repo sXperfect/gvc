@@ -88,7 +88,7 @@ def test_amax_rejects_zero_and_non_vector_inputs():
 
 def test_bitio_rejects_values_that_do_not_fit():
     bits = BitIO()
-    with pytest.raises(RuntimeError, match="exceeds"):
+    with pytest.raises(ValueError, match="exceeds"):
         bits.write(4, 2)
 
 

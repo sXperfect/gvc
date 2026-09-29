@@ -50,7 +50,7 @@ def test_encoder_accepts_pathlike_inputs(tmp_path):
 def test_encoder_rejects_unsupported_input_suffix(tmp_path):
     source = tmp_path / "input.txt"
     source.write_text("not a VCF")
-    with pytest.raises(ValueError, match="\.vcf"):
+    with pytest.raises(ValueError, match=r"\.vcf"):
         Encoder(source, tmp_path / "out.gvc")
 
 

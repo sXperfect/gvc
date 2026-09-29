@@ -122,3 +122,20 @@ def test_debin_bit_plane_rejects_plane_count_mismatch():
         binarization.debin_bit_plane([plane], bit_depth=2, axis=2)
     with pytest.raises(ValueError, match="one matrix"):
         binarization.debin_bit_plane([plane, plane], bit_depth=2, axis=0)
+
+
+
+def test_adaptive_max_value_accepts_reader_tensor():
+    source = np.array(
+        [
+            [[0, -1], [1, 1]],
+            [[-2, 2], [0, -1]],
+        ],
+        dtype=np.int8,
+    )
+    encoded, missing_value, na_value = binarization.adaptive_max_value(source)
+    assert encoded.shape == source.shape
+    restored = binarization.undo_adaptive_max_value(
+        encoded.copy(), missing_value, na_value
+    )
+    np.testing.assert_array_equal(restored, source)
