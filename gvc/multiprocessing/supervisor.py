@@ -7,7 +7,7 @@ import time
 import traceback
 from pathlib import Path
 
-from .messages import ReaderDone, WorkerError, WriterDone
+from .messages import Progress, ReaderDone, WorkerError, WriterDone
 
 
 class MultiprocessingEncodeError(RuntimeError):
@@ -125,6 +125,8 @@ class EncodeProcessSupervisor:
                     self._reader_total = status.total_blocks
                 elif isinstance(status, WriterDone):
                     self._writer_total = status.total_blocks
+                elif isinstance(status, Progress):
+                    pass
 
         if progressed:
             self._last_progress = time.monotonic()

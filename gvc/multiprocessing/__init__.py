@@ -1,5 +1,6 @@
 from .messages import (
     EncodedBlock,
+    Progress,
     ReaderDone,
     StopWork,
     WorkItem,
@@ -13,6 +14,7 @@ __all__ = [
     "EncodedBlock",
     "EncodeProcessSupervisor",
     "MultiprocessingEncodeError",
+    "Progress",
     "ReaderDone",
     "StopWork",
     "WorkItem",

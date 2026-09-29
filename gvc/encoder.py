@@ -15,6 +15,7 @@ from .codec import CODEC_STR2ID, encode
 from .multiprocessing import (
     EncodedBlock,
     EncodeProcessSupervisor,
+    Progress,
     ReaderDone,
     StopWork,
     WorkItem,
@@ -415,6 +416,11 @@ def worker_reader(
         if not _queue_put(work_q, item, stop_event):
             return
         total_blocks += 1
+        _queue_put(
+            status_q,
+            Progress("reader", total_blocks),
+            stop_event,
+        )
 
     for _ in range(num_processes):
         if not _queue_put(work_q, StopWork(), stop_event):
@@ -558,6 +564,11 @@ def worker_writer(
                 )
                 next_block_id += 1
                 written_blocks += 1
+                _queue_put(
+                    status_q,
+                    Progress("writer", written_blocks),
+                    stop_event,
+                )
 
         if stop_event.is_set():
             return

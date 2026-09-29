@@ -45,3 +45,10 @@ class WorkerError:
     error_type: str
     message: str
     traceback: str
+
+
+
+@dataclass(frozen=True)
+class Progress:
+    stage: str
+    total: int
