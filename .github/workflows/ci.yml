@@ -98,11 +98,16 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Verify Python 3.10 full gate
+      - name: Verify Python 3.10 compatibility gate
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
-          python scripts/ci.py all
+          python scripts/ci.py metadata
+          python scripts/ci.py syntax
+          python scripts/ci.py native
+          python scripts/ci.py test
+          python scripts/ci.py cli
+          python scripts/ci.py deps
           python scripts/ci.py optional
 
       - name: Clean Python 3.10 products
@@ -137,11 +142,16 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Verify Python 3.12 full gate
+      - name: Verify Python 3.12 compatibility gate
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
-          python scripts/ci.py all
+          python scripts/ci.py metadata
+          python scripts/ci.py syntax
+          python scripts/ci.py native
+          python scripts/ci.py test
+          python scripts/ci.py cli
+          python scripts/ci.py deps
           python scripts/ci.py optional
 
       - name: Clean Python 3.12 products
@@ -176,9 +186,14 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Verify Python 3.14 full current stack
+      - name: Verify Python 3.14 current stack
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
-          python scripts/ci.py all
+          python scripts/ci.py metadata
+          python scripts/ci.py syntax
+          python scripts/ci.py native
+          python scripts/ci.py test
+          python scripts/ci.py cli
+          python scripts/ci.py deps
           python scripts/ci.py optional

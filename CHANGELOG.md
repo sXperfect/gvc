@@ -22,6 +22,9 @@ All notable changes to this repository will be documented here.
 - Python 3.8 wheel and sdist build/install smoke tests from outside the source checkout.
 - Python 3.8 wheel/sdist build-and-install isolation gate with native-extension and installed-CLI smoke tests.
 - Explicit source-distribution manifest for the Cython `.pyx` build sources.
+- Complete file-level Encoder/Decoder regression coverage for bit-plane,
+  row-bin-split, and haploid VCF inputs.
+- Random-access index, BinMat framing, and standalone libgvc safety tests.
 
 ### Changed
 
@@ -46,4 +49,8 @@ All notable changes to this repository will be documented here.
   seeking, so truncated files cannot be accepted by length arithmetic alone.
 - Haploid genotype text reconstruction now uses an indexable one-allele
   codebook.
+- Unknown sample IDs now fail explicitly instead of silently mapping to column zero.
+- Row-bin-split shape reconstruction and haploid phase handling are corrected.
+- `BinMat` now writes and reads its matrix payload rather than dimensions only.
+- The standalone C permutation bridge uses a length-aware checked decoder.
 - VCF and Numba integrations are lazy/optional rather than mandatory imports.
