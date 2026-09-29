@@ -14,7 +14,7 @@ class VectorAMax:
         if not np.issubdtype(vector.dtype, np.integer):
             raise TypeError("AMax vector must contain integers")
         if vector.size and np.any(vector < 1):
-            raise ValueError("AMax vector entries must be positive")
+            raise ValueError("AMax vector entries must be positive and non-zero")
         if vector.size >= (1 << (8 * consts.AMAX_NUM_ENTRIES_LEN)):
             raise ValueError("AMax vector has too many entries")
         self.vector = vector

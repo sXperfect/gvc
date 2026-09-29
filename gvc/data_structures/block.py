@@ -16,6 +16,10 @@ class BlockHeader:
     def __init__(self, content_id, block_payload_size):
         if not _fits_unsigned(content_id, consts.CONTENT_ID_LEN):
             raise ValueError("content_id is outside the serialized range")
+        if not isinstance(block_payload_size, int) or isinstance(block_payload_size, bool):
+            raise TypeError("block payload size must be an integer")
+        if block_payload_size < 0:
+            raise ValueError("block payload size must be non-negative")
         if not _fits_unsigned(block_payload_size, consts.BLOCK_PAYLOAD_SIZE_LEN):
             raise ValueError("block payload size is outside the serialized range")
         self.content_id = content_id

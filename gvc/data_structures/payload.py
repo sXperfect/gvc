@@ -1,3 +1,5 @@
+from numbers import Integral
+
 from . import consts
 from .param_set import ParameterSet
 from ..bitstream import RandomAccessHandler
@@ -143,10 +145,15 @@ class GenotypePayload:
             ("na_rep_val", na_rep_val, consts.NA_REP_VAL_LEN),
         ):
             if value is not None:
-                if not isinstance(value, int) or isinstance(value, bool):
+                if not isinstance(value, Integral) or isinstance(value, bool):
                     raise TypeError("{} must be an integer".format(name))
+                value = int(value)
                 if not 0 <= value < (1 << (8 * length)):
                     raise ValueError("{} is outside the serialized range".format(name))
+                if name == "missing_rep_val":
+                    missing_rep_val = value
+                else:
+                    na_rep_val = value
 
         self.missing_rep_val = missing_rep_val
         self.na_rep_val = na_rep_val
