@@ -27,6 +27,8 @@ def test_v1_0_dependency_policy_is_modern_and_bounded():
         '"pytest>=8.3.5,<10"',
         '"Cython>=3.2.9,<4"',
         '"build>=1.2.2.post1,<2"',
+        '"setuptools>=75.3.2,<76; python_version < \'3.9\'"',
+        '"wheel>=0.45.1,<1; python_version < \'3.9\'"',
     ]
     for requirement in expected:
         assert requirement in metadata
