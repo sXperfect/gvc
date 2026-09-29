@@ -5,6 +5,7 @@ import logging as log
 import multiprocessing as mp
 import os
 import queue
+import uuid
 
 import gvc.common
 from . import data_structures as ds
@@ -182,7 +183,11 @@ def _queue_get(source_queue, stop_event, timeout=0.2):
 
 
 def _temp_output_path(output_fpath):
-    return "{}.tmp.{}".format(output_fpath, os.getpid())
+    return "{}.tmp.{}.{}".format(
+        output_fpath,
+        os.getpid(),
+        uuid.uuid4().hex,
+    )
 
 
 class _BlockProcessingError(RuntimeError):
@@ -257,6 +262,7 @@ def run_multiprocessing(
                     worker_id,
                     work_q,
                     result_q,
+                    status_q,
                     stop_event,
                     ps_params,
                     tsp_params,
@@ -438,10 +444,12 @@ def worker_encoder(
     worker_id,
     work_q,
     result_q,
+    status_q,
     stop_event,
     ps_params,
     tsp_params,
 ):
+    processed_blocks = 0
     while not stop_event.is_set():
         item = _queue_get(work_q, stop_event)
         if item is None:
@@ -469,6 +477,15 @@ def worker_encoder(
             stop_event,
         ):
             return
+        processed_blocks += 1
+        _queue_put(
+            status_q,
+            Progress(
+                "encoder[{}]".format(worker_id),
+                processed_blocks,
+            ),
+            stop_event,
+        )
 
 
 def _store_ordered_block(

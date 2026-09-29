@@ -131,6 +131,14 @@ class EncodeProcessSupervisor:
         if progressed:
             self._last_progress = time.monotonic()
 
+    def _drain_completion_messages(self, timeout=1.0):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            self._drain_messages()
+            if self._reader_total is not None and self._writer_total is not None:
+                return
+            time.sleep(min(self.poll_interval, 0.05))
+
     def _unexpected_exits(self):
         known = {
             (error.stage, error.worker_id)
@@ -169,7 +177,7 @@ class EncodeProcessSupervisor:
                 raise MultiprocessingEncodeError(self._errors)
 
             if all(proc.exitcode is not None for proc in self.processes):
-                self._drain_messages()
+                self._drain_completion_messages()
                 synthetic = self._unexpected_exits()
                 if synthetic:
                     self._errors.extend(synthetic)
@@ -287,7 +295,13 @@ class EncodeProcessSupervisor:
 
     @staticmethod
     def _backup_path(path):
-        return Path(str(path) + ".gvc-backup-{}".format(os.getpid()))
+        return Path(
+            str(path)
+            + ".gvc-backup-{}-{}".format(
+                os.getpid(),
+                __import__("uuid").uuid4().hex,
+            )
+        )
 
     def commit(self):
         """Replace final file + sidecar with rollback on partial failure."""
