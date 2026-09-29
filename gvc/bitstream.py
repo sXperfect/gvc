@@ -189,7 +189,7 @@ class BitIO:
         elif bits is None and nbits is None:
             pass
         else:
-            raise RuntimeError("Either bits or nbits is None")
+            raise ValueError("bits and nbits must either both be set or both be None")
 
     def write(self, bits, nbits):
         if not isinstance(nbits, int) or isinstance(nbits, bool) or nbits < 0:
@@ -199,7 +199,7 @@ class BitIO:
         if bits < 0:
             raise ValueError("bits must be non-negative")
         if bits.bit_length() > nbits:
-            raise RuntimeError("Bit length of bits exceeds nbits")
+            raise ValueError("bit length of bits exceeds nbits")
         self.len += nbits
         self.data <<= nbits
         self.data ^= bits
@@ -221,5 +221,5 @@ class BitIO:
         if align:
             self.align_to_byte()
         if not self._byte_aligned():
-            raise RuntimeError("Byte not aligned")
+            raise ValueError("bit buffer is not byte-aligned")
         return int2bstr(self.data, self.len_in_byte(), order=self.BYTEORDER)

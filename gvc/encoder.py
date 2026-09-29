@@ -14,6 +14,8 @@ from . import reader
 from .binarization import binarize_allele_matrix, BINARIZATION_STR2ID
 from .sort import sort
 from .codec import CODEC_STR2ID, encode
+from .dist import DIST_FUNC
+from .solver import SOLVERS
 from .multiprocessing import (
     EncodedBlock,
     EncodeProcessSupervisor,
@@ -386,21 +388,96 @@ class Encoder(object):
         multiprocessing_initializer_args=(),
     ):
 
-        self.input_fpath = input_fpath
-        self.output_fpath = output_fpath
+        self.input_fpath = os.fspath(input_fpath)
+        self.output_fpath = os.fspath(output_fpath)
+
+        if not (
+            self.input_fpath.endswith(".vcf")
+            or self.input_fpath.endswith(".vcf.gz")
+        ):
+            raise ValueError(
+                "input must be a .vcf or .vcf.gz file: {}".format(
+                    self.input_fpath
+                )
+            )
+
+        if binarization_name not in BINARIZATION_STR2ID:
+            raise ValueError(
+                "unknown binarization {!r}; expected one of {}".format(
+                    binarization_name,
+                    sorted(BINARIZATION_STR2ID),
+                )
+            )
+        if codec_name not in CODEC_STR2ID:
+            raise ValueError(
+                "unknown codec {!r}; expected one of {}".format(
+                    codec_name,
+                    sorted(CODEC_STR2ID),
+                )
+            )
+        if not isinstance(axis, int) or isinstance(axis, bool) or axis not in (0, 1, 2):
+            raise ValueError("axis must be 0, 1, or 2")
+        if not isinstance(block_size, int) or isinstance(block_size, bool):
+            raise TypeError("block_size must be an integer")
+        if block_size <= 0:
+            raise ValueError("block_size must be positive")
+        if not isinstance(num_threads, int) or isinstance(num_threads, bool):
+            raise TypeError("num_threads must be an integer")
+        if num_threads < 0:
+            raise ValueError("num_threads must be non-negative")
+        if solver not in SOLVERS:
+            raise ValueError(
+                "unknown solver {!r}; expected one of {}".format(
+                    solver, sorted(SOLVERS)
+                )
+            )
+        if dist not in DIST_FUNC:
+            raise ValueError(
+                "unknown distance function {!r}; expected one of {}".format(
+                    dist, sorted(DIST_FUNC)
+                )
+            )
+        if (
+            not isinstance(preset_mode, int)
+            or isinstance(preset_mode, bool)
+            or preset_mode not in (0, 1, 2)
+        ):
+            raise ValueError("preset_mode must be 0, 1, or 2")
+        if multiprocessing_start_method is not None:
+            if multiprocessing_start_method not in mp.get_all_start_methods():
+                raise ValueError(
+                    "unsupported multiprocessing start method: {}".format(
+                        multiprocessing_start_method
+                    )
+                )
+        if multiprocessing_stall_timeout is not None:
+            multiprocessing_stall_timeout = float(
+                multiprocessing_stall_timeout
+            )
+            if multiprocessing_stall_timeout <= 0:
+                raise ValueError(
+                    "multiprocessing_stall_timeout must be positive"
+                )
+        if (
+            multiprocessing_initializer is not None
+            and not callable(multiprocessing_initializer)
+        ):
+            raise TypeError(
+                "multiprocessing_initializer must be callable or None"
+            )
 
         # Parameter Set
         self.binarization_id = BINARIZATION_STR2ID[binarization_name]
         self.codec_id = CODEC_STR2ID[codec_name]
         self.axis = axis
-        self.sort_cols = sort_cols
-        self.sort_rows = sort_rows
-        self.transpose = transpose
+        self.sort_cols = bool(sort_cols)
+        self.sort_rows = bool(sort_rows)
+        self.transpose = bool(transpose)
 
         # Binarization parameter (additional)
         self.block_size = block_size
         self.max_cols = max_cols
-        
+
         # Parameter for sorting process
         self.dist = dist
         self.solver = solver

@@ -54,3 +54,16 @@ def test_read_bits_rejects_end_of_stream():
     reader = BitstreamReader(BytesIO(b""))
     with pytest.raises(EOFError, match="unexpected end"):
         reader.read_bits(1)
+
+
+
+def test_bitio_uses_value_errors_for_invalid_public_operations():
+    with pytest.raises(ValueError, match="both be set"):
+        BitIO(bits=1)
+    with pytest.raises(ValueError, match="exceeds"):
+        BitIO().write(4, 1)
+
+    bits = BitIO()
+    bits.write(1, 1)
+    with pytest.raises(ValueError, match="byte-aligned"):
+        bits.to_bytes(align=False)

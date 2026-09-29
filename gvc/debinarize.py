@@ -16,14 +16,16 @@ def tensor_to_matrix(tensor):
     matrix : ndarray
         a ndarray with dimension of 2
     """
-    assert(len(tensor.shape) == 3)
+    tensor = np.asarray(tensor)
+    if tensor.ndim != 3:
+        raise ValueError("tensor must be three-dimensional")
+    if tensor.shape[1] <= 0:
+        raise ValueError("tensor sample dimension must be positive")
 
     list_matrix = np.split(tensor, tensor.shape[1], axis=1)
-
     matrix = np.concatenate(list_matrix, axis=2).squeeze(axis=1)
-    
-    assert(np.issubdtype(matrix.dtype, tensor.dtype))
-    
+    if matrix.dtype != tensor.dtype:
+        raise RuntimeError("tensor-to-matrix conversion changed dtype")
     return matrix
 
 def simd_tensor_to_txt(allele_tensor, phasing_tensor):

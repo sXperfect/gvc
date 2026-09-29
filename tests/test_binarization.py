@@ -82,3 +82,43 @@ def test_split_genotype_matrix_handles_phase_and_missing_values():
             dtype=bool,
         ),
     )
+
+
+
+def test_split_genotype_matrix_handles_haploid_input():
+    allele_matrix, phase_matrix, ploidy = binarization.split_genotype_matrix(
+        ["0\t1\n", ".\t2\n"]
+    )
+    assert ploidy == 1
+    assert phase_matrix is None
+    np.testing.assert_array_equal(
+        allele_matrix,
+        np.array([[0, 1], [-1, 2]], dtype=np.int8),
+    )
+
+
+def test_adaptive_max_value_rejects_unsigned_input():
+    with pytest.raises(TypeError, match="signed integer"):
+        binarization.adaptive_max_value(
+            np.array([[0, 1]], dtype=np.uint8)
+        )
+
+
+def test_binarizers_reject_invalid_shapes_and_values():
+    with pytest.raises(ValueError, match="two-dimensional"):
+        binarization.bin_bit_plane(np.zeros((2, 2, 1), dtype=np.uint8), axis=2)
+    with pytest.raises(ValueError, match="non-negative"):
+        binarization.bin_bit_plane(np.array([[0, -1]], dtype=np.int8), axis=2)
+    with pytest.raises(ValueError, match="axis"):
+        binarization.bin_bit_plane(np.array([[0, 1]], dtype=np.uint8), axis=7)
+
+    with pytest.raises(ValueError, match="two-dimensional"):
+        binarization.bin_row_bin_split(np.zeros((2, 2, 1), dtype=np.uint8))
+
+
+def test_debin_bit_plane_rejects_plane_count_mismatch():
+    plane = np.zeros((2, 2), dtype=bool)
+    with pytest.raises(ValueError, match="count"):
+        binarization.debin_bit_plane([plane], bit_depth=2, axis=2)
+    with pytest.raises(ValueError, match="one matrix"):
+        binarization.debin_bit_plane([plane, plane], bit_depth=2, axis=0)
