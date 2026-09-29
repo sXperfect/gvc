@@ -12,7 +12,9 @@ from gvc.encoder import Encoder
 
 
 VCF_FIXTURE = Path(__file__).parent / "fixtures" / "tiny_diploid.vcf"
+HAPLOID_FIXTURE = Path(__file__).parent / "fixtures" / "tiny_haploid.vcf"
 EXPECTED_GT = "0|1\t1/1\n2/1\t0|2\n./.\t1|0\n"
+EXPECTED_HAPLOID_GT = "0\t1\n2\t0\n.\t1\n"
 
 
 def _framed_array_encode(matrix):
@@ -125,3 +127,31 @@ def test_encoder_default_codec_name_is_registered(tmp_path):
         num_threads=0,
     )
     assert encoder.codec_id == CodecID.JBIG1
+
+
+
+def test_complete_haploid_file_roundtrip(framed_test_codec, tmp_path):
+    encoded = tmp_path / "haploid.gvc"
+    decoded = tmp_path / "haploid.txt"
+
+    Encoder(
+        str(HAPLOID_FIXTURE),
+        str(encoded),
+        binarization_name="bit_plane",
+        axis=2,
+        sort_rows=False,
+        sort_cols=False,
+        block_size=2,
+        codec_name="jbig",
+        num_threads=0,
+    ).run()
+
+    decoder = Decoder(str(encoded), str(decoded))
+    try:
+        decoder.decode()
+    finally:
+        if decoder._out_f is not None:
+            decoder._out_f.close()
+        decoder._f.close()
+
+    assert decoded.read_text() == EXPECTED_HAPLOID_GT

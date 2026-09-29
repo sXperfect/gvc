@@ -125,19 +125,22 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
             allele_matrix = np.empty(
                 (block_size, num_samples, p), dtype=gvc.common.SIGNED_ALLELE_DTYPE
             )
-            phase_matrix = np.empty((block_size, num_samples, p - 1), dtype=bool)
+            if p == 1:
+                phase_matrix = np.empty((block_size, 0), dtype=bool)
+            else:
+                phase_matrix = np.empty(
+                    (block_size, num_samples, p - 1), dtype=bool
+                )
             meta_handler.init_block()
 
         meta_handler.proc_var(i_var, variant)
         genotypes = variant.genotype.array()
         allele_matrix[i_var, :, :] = genotypes[:, :p]
-        try:
+        if p > 1:
             # cyvcf2 uses True for "|" while GVC serializes 0 for "|" and
             # 1 for "/". Convert at the ingestion boundary so every internal
             # path uses the same phase convention as split_genotype_matrix().
             phase_matrix[i_var, :, :] = np.logical_not(genotypes[:, p:])
-        except (ValueError, IndexError):
-            pass
 
         i_var += 1
         if i_var == block_size:
@@ -146,7 +149,10 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
                 allele_matrix
             )
             allele_matrix = reshape_trans_mat(allele_matrix, 1)
-            phase_matrix = reshape_trans_mat(phase_matrix, 1)
+            if p > 1:
+                phase_matrix = reshape_trans_mat(phase_matrix, 1)
+            else:
+                phase_matrix = phase_matrix[:block_size]
             meta_handler.proc_block(block_id)
             yield allele_matrix, phase_matrix, p, missing_rep_val, na_rep_val
             i_var = 0
@@ -160,9 +166,10 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
     suballele_matrix, missing_rep_val, na_rep_val = gvc.binarization.adaptive_max_value(
         allele_matrix[:i_var, :]
     )
-    subphase_matrix = phase_matrix[:i_var, :]
+    subphase_matrix = phase_matrix[:i_var]
     suballele_matrix = reshape_trans_mat(suballele_matrix, 1)
-    subphase_matrix = reshape_trans_mat(subphase_matrix, 1)
+    if p > 1:
+        subphase_matrix = reshape_trans_mat(subphase_matrix, 1)
     meta_handler.proc_block(block_id, i_var)
     meta_handler.end()
     yield suballele_matrix, subphase_matrix, p, missing_rep_val, na_rep_val

@@ -9,6 +9,7 @@ from gvc import binarization, reader
 pytest.importorskip("cyvcf2")
 
 FIXTURE = Path(__file__).parent / "fixtures" / "tiny_diploid.vcf"
+HAPLOID_FIXTURE = Path(__file__).parent / "fixtures" / "tiny_haploid.vcf"
 
 
 def test_tiny_vcf_reader_preserves_alleles_and_gvc_phase_convention():
@@ -68,3 +69,31 @@ def test_tiny_vcf_reader_matches_text_parser_for_complete_records():
     assert ploidy == expected_ploidy
     np.testing.assert_array_equal(alleles, expected_alleles)
     np.testing.assert_array_equal(phases, expected_phases)
+
+
+
+def test_haploid_vcf_reader_has_zero_width_phase_matrix():
+    blocks = list(
+        reader.vcf_genotypes_reader(str(HAPLOID_FIXTURE), None, block_size=2)
+    )
+    assert len(blocks) == 2
+
+    alleles, phases, ploidy, missing_rep, na_rep = blocks[0]
+    assert ploidy == 1
+    assert phases.shape == (2, 0)
+    assert missing_rep is None
+    assert na_rep is None
+    np.testing.assert_array_equal(
+        alleles,
+        np.array([[0, 1], [2, 0]], dtype=np.uint8),
+    )
+
+    tail_alleles, tail_phases, ploidy, missing_rep, na_rep = blocks[1]
+    assert ploidy == 1
+    assert tail_phases.shape == (1, 0)
+    assert missing_rep == 2
+    assert na_rep is None
+    np.testing.assert_array_equal(
+        tail_alleles,
+        np.array([[2, 1]], dtype=np.uint8),
+    )
