@@ -12,6 +12,7 @@ from gvc.multiprocessing import MultiprocessingEncodeError
 
 from tests.mp_test_codec import decode as mp_decode
 from tests.mp_test_codec import encode as mp_encode
+from tests.mp_test_codec import install as install_mp_codec
 from tests.test_file_roundtrip import (
     EXPECTED_GT,
     VCF_FIXTURE,
@@ -411,3 +412,75 @@ def test_parallel_encoder_rejects_unsafe_output_paths(tmp_path):
             [],
             1,
         )
+
+
+
+def test_spawn_mode_successful_encode_roundtrip(monkeypatch, tmp_path):
+    if "spawn" not in mp.get_all_start_methods():
+        pytest.skip("spawn start method is unavailable")
+
+    # Parent needs the decoder; spawned encoder children rebuild their own
+    # registry using the explicit top-level initializer.
+    codec = MAT_CODECS[CodecID.JBIG1]
+    monkeypatch.setitem(codec, "encoder", mp_encode)
+    monkeypatch.setitem(codec, "decoder", mp_decode)
+
+    encoded = tmp_path / "spawn.gvc"
+    decoded = tmp_path / "spawn.txt"
+
+    Encoder(
+        str(VCF_FIXTURE),
+        str(encoded),
+        binarization_name="bit_plane",
+        axis=2,
+        sort_rows=False,
+        sort_cols=False,
+        block_size=1,
+        codec_name="jbig",
+        preset_mode=0,
+        num_threads=2,
+        multiprocessing_start_method="spawn",
+        multiprocessing_stall_timeout=20,
+        multiprocessing_initializer=install_mp_codec,
+    ).run()
+
+    decoder = Decoder(str(encoded), str(decoded))
+    try:
+        decoder.decode()
+    finally:
+        _close_decoder(decoder)
+
+    assert decoded.read_text() == EXPECTED_GT
+    assert (tmp_path / "spawn.gvc.metadata" / "main.npy").is_file()
+
+
+def test_spawn_initializer_failure_is_structured(tmp_path):
+    if "spawn" not in mp.get_all_start_methods():
+        pytest.skip("spawn start method is unavailable")
+
+    def local_initializer():
+        pass
+
+    # A nested initializer is intentionally not picklable under spawn. The
+    # parent should fail without publishing a partial final artifact.
+    with pytest.raises((AttributeError, TypeError)):
+        run_multiprocessing(
+            str(VCF_FIXTURE),
+            str(tmp_path / "unpicklable.gvc"),
+            block_size=1,
+            ps_params=[
+                BinarizationID.BIT_PLANE,
+                CodecID.JBIG1,
+                2,
+                False,
+                False,
+                False,
+            ],
+            tsp_params=["ham", "nn", 0],
+            num_processes=1,
+            start_method="spawn",
+            process_initializer=local_initializer,
+            stall_timeout=10,
+        )
+
+    assert not (tmp_path / "unpicklable.gvc").exists()

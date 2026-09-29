@@ -31,7 +31,9 @@ The maintained test suite now covers:
 - end-to-end random-access tests for genomic intervals, sample-only selection,
   empty in-block intervals, and metadata sidecars;
 - deterministic two-worker multiprocessing encode parity against sequential
-  output, isolated behind a subprocess timeout;
+  output, structured reader/worker failure injection, atomic rollback,
+  watchdog cancellation, and successful spawn-mode encoding with explicit
+  child-process initialization;
 - wheel and sdist build/install isolation from outside the source checkout;
 - installed native-extension imports and installed CLI startup.
 
@@ -73,8 +75,9 @@ suite and should be performed before declaring a production 1.0.x release:
    compare reconstructed genotypes against the source data.
 4. Exercise random-access queries against real production-scale metadata
    sidecars; hosted CI covers the same behavior on deterministic tiny fixtures.
-5. Stress the multiprocessing encoder beyond the hosted deterministic two-worker
-   parity test, including worker failures, high queue pressure, and large inputs.
+5. Stress the multiprocessing encoder beyond hosted two-worker and spawn-mode
+   correctness/failure tests, especially high queue pressure, large inputs,
+   abrupt OS-level termination, and production codec subprocess failures.
 6. Stress very large matrices/block counts near serialized field-size
    boundaries and monitor memory use.
 7. Run native builds on any production platforms beyond the Linux CI target,

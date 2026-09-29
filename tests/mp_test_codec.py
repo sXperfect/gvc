@@ -24,3 +24,13 @@ def decode(payload):
     if len(payload) < BIE_HEADER_LEN:
         raise ValueError("test codec payload is truncated")
     return np.load(BytesIO(payload[BIE_HEADER_LEN:]), allow_pickle=False)
+
+
+
+def install():
+    """Install the deterministic test codec inside the current process."""
+    from gvc.codec import MAT_CODECS
+    from gvc.data_structures.consts import CodecID
+
+    MAT_CODECS[CodecID.JBIG1]["encoder"] = encode
+    MAT_CODECS[CodecID.JBIG1]["decoder"] = decode

@@ -25,6 +25,9 @@ All notable changes to this repository will be documented here.
 - Additional byte-exact v1 structural fixtures for row-bin-split/missing values,
   mixed phase payloads, and sorted multi-plane payloads.
 - End-to-end random-access and multiprocessing parity regressions.
+- A parent-supervised multiprocessing pipeline with structured errors,
+  bounded backpressure, progress/watchdog support, transactional output,
+  failure cleanup, and fork/spawn lifecycle coverage.
 - Complete file-level Encoder/Decoder regression coverage for bit-plane,
   row-bin-split, and haploid VCF inputs.
 - Random-access index, BinMat framing, and standalone libgvc safety tests.
@@ -59,6 +62,8 @@ All notable changes to this repository will be documented here.
 - VCF ingestion now finalizes metadata on exact block boundaries and splits
   blocks when ploidy changes, preserving one ploidy per ParameterSet.
 - Random access handles sample-only queries and empty intervals deterministically.
+- Spawned encoder workers can rebuild process-local codec/plugin state through
+  an explicit picklable initializer hook.
 - The standalone ctypes/C permutation decoder now rejects duplicate IDs and
   trailing payload bytes just like the Python reference implementation.
 - VCF and Numba integrations are lazy/optional rather than mandatory imports.
