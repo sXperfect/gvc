@@ -456,19 +456,26 @@ def test_spawn_mode_successful_encode_roundtrip(monkeypatch, tmp_path):
     assert (tmp_path / "spawn.gvc.metadata" / "main.npy").is_file()
 
 
-def test_spawn_initializer_failure_is_structured(tmp_path):
-    if "spawn" not in mp.get_all_start_methods():
-        pytest.skip("spawn start method is unavailable")
-
+@pytest.mark.parametrize(
+    "start_method",
+    [
+        method
+        for method in ("spawn", "forkserver")
+        if method in mp.get_all_start_methods()
+    ],
+)
+def test_nonfork_initializer_must_be_picklable(tmp_path, start_method):
     def local_initializer():
         pass
 
-    # A nested initializer is intentionally not picklable under spawn. The
-    # parent should fail without publishing a partial final artifact.
+    # A nested initializer is intentionally not picklable. The parent should
+    # reject it before launching any child under contexts that serialize
+    # process state.
+    output = tmp_path / ("unpicklable-{}.gvc".format(start_method))
     with pytest.raises(TypeError, match="picklable"):
         run_multiprocessing(
             str(VCF_FIXTURE),
-            str(tmp_path / "unpicklable.gvc"),
+            str(output),
             block_size=1,
             ps_params=[
                 BinarizationID.BIT_PLANE,
@@ -480,9 +487,9 @@ def test_spawn_initializer_failure_is_structured(tmp_path):
             ],
             tsp_params=["ham", "nn", 0],
             num_processes=1,
-            start_method="spawn",
+            start_method=start_method,
             process_initializer=local_initializer,
             stall_timeout=10,
         )
 
-    assert not (tmp_path / "unpicklable.gvc").exists()
+    assert not output.exists()

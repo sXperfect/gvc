@@ -249,19 +249,24 @@ def run_multiprocessing(
     else:
         process_initializer_args = tuple(process_initializer_args)
 
-    if start_method == "spawn" and process_initializer is not None:
-        try:
-            pickle.dumps((process_initializer, process_initializer_args))
-        except Exception as exc:
-            raise TypeError(
-                "spawn process_initializer and arguments must be picklable"
-            ) from exc
-
     context = (
         mp.get_context(start_method)
         if start_method is not None
         else mp.get_context()
     )
+    effective_start_method = context.get_start_method()
+    if (
+        effective_start_method in ("spawn", "forkserver")
+        and process_initializer is not None
+    ):
+        try:
+            pickle.dumps((process_initializer, process_initializer_args))
+        except Exception as exc:
+            raise TypeError(
+                "{} process_initializer and arguments must be picklable".format(
+                    effective_start_method
+                )
+            ) from exc
     work_q = context.Queue(maxsize=max(1, num_processes * 2))
     result_q = context.Queue(maxsize=max(1, num_processes * 2))
     error_q = context.Queue()
