@@ -220,3 +220,99 @@ def test_supervisor_error_carries_stage_information(tmp_path):
     assert exc_info.value.errors
     assert any(error.stage == "reader" for error in exc_info.value.errors)
     assert "Invalid Format" in str(exc_info.value)
+
+
+
+def test_worker_failure_is_atomic_and_leaves_no_children(tmp_path):
+    final = tmp_path / "worker-failure.gvc"
+    final.write_bytes(b"ORIGINAL")
+    metadata = tmp_path / "worker-failure.gvc.metadata"
+    metadata.mkdir()
+    (metadata / "marker.txt").write_text("ORIGINAL-METADATA")
+
+    before = {proc.pid for proc in mp.active_children()}
+    with pytest.raises(MultiprocessingEncodeError) as exc_info:
+        run_multiprocessing(
+            str(VCF_FIXTURE),
+            str(final),
+            block_size=1,
+            # Intentionally malformed: reader succeeds and encoder fails once
+            # the first WorkItem is consumed.
+            ps_params=[],
+            tsp_params=[],
+            num_processes=2,
+            stall_timeout=10,
+        )
+
+    assert any(error.stage == "encoder" for error in exc_info.value.errors)
+    assert final.read_bytes() == b"ORIGINAL"
+    assert (metadata / "marker.txt").read_text() == "ORIGINAL-METADATA"
+    assert not list(tmp_path.glob("worker-failure.gvc.tmp.*"))
+    assert not list(tmp_path.glob("worker-failure.gvc.tmp.*.metadata"))
+    assert {proc.pid for proc in mp.active_children()} <= before
+
+
+def test_spawn_mode_failure_supervision_is_picklable(tmp_path):
+    if "spawn" not in mp.get_all_start_methods():
+        pytest.skip("spawn start method is unavailable")
+
+    with pytest.raises(MultiprocessingEncodeError):
+        run_multiprocessing(
+            str(VCF_FIXTURE),
+            str(tmp_path / "spawn-failure.gvc"),
+            block_size=1,
+            ps_params=[],
+            tsp_params=[],
+            num_processes=1,
+            start_method="spawn",
+            stall_timeout=15,
+        )
+
+    assert not (tmp_path / "spawn-failure.gvc").exists()
+    assert not list(tmp_path.glob("spawn-failure.gvc.tmp.*"))
+
+
+def test_transaction_commit_rolls_back_file_and_metadata(monkeypatch, tmp_path):
+    import queue as local_queue
+
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+    import gvc.multiprocessing.supervisor as supervisor_module
+
+    final = tmp_path / "atomic.gvc"
+    final.write_bytes(b"OLD-FILE")
+    final_metadata = tmp_path / "atomic.gvc.metadata"
+    final_metadata.mkdir()
+    (final_metadata / "marker").write_text("OLD-METADATA")
+
+    temp = tmp_path / "atomic.gvc.tmp.123"
+    temp.write_bytes(b"NEW-FILE")
+    temp_metadata = tmp_path / "atomic.gvc.tmp.123.metadata"
+    temp_metadata.mkdir()
+    (temp_metadata / "marker").write_text("NEW-METADATA")
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[],
+        error_q=local_queue.Queue(),
+        status_q=local_queue.Queue(),
+        stop_event=DummyEvent(),
+        queues=[],
+        temp_output=temp,
+        final_output=final,
+    )
+
+    real_replace = supervisor_module.os.replace
+
+    def fail_metadata_commit(src, dst):
+        if str(src) == str(temp_metadata) and str(dst) == str(final_metadata):
+            raise OSError("simulated metadata commit failure")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(supervisor_module.os, "replace", fail_metadata_commit)
+
+    with pytest.raises(OSError, match="metadata commit failure"):
+        supervisor.commit()
+
+    assert final.read_bytes() == b"OLD-FILE"
+    assert (final_metadata / "marker").read_text() == "OLD-METADATA"
+    assert not temp.exists()
+    assert not temp_metadata.exists()
