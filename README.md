@@ -59,9 +59,11 @@ CMake helper before running the test suite.
 ### Entropy Codec
 ---
 
-In order to encode or decode the payloads based on JBIG codec, an external executable is required.
-You can use any of the existing and publicly available JBIG codec implementation.
-We provide an example on how to integrate JBIG-based codec [here](JBIG.md).
+GVC's historical JBIG codec uses the external JBIG-KIT T.85 executables
+`pbmtojbg85` and `jbgtopbm85`. The maintained integration discovers them
+from PATH or from `GVC_JBIG_ENCODER` / `GVC_JBIG_DECODER`. See
+[JBIG.md](JBIG.md) for installation, timeout configuration, multiprocessing,
+and historical compatibility verification.
 
 Generic compressors, such as LZMA or BZIP2, are supported.
 Please refer to this [documentation](CODEC.md) for integration.
