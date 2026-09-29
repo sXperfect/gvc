@@ -653,12 +653,14 @@ class Decoder(object):
         if not outputs:
             return None
 
-        combined = "\n".join(outputs)
+        # Each decoded block is already newline-terminated. Concatenate the
+        # block streams directly so random-access output has the same framing
+        # as full-file decoding, without blank lines between blocks.
+        combined = "".join(outputs)
         if self._out_f is not None:
             self._out_f.write(combined)
-            self._out_f.write("\n")
         else:
-            print(combined)
+            print(combined, end="")
         return combined
 
     def compare(self,
