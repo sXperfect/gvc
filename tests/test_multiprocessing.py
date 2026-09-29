@@ -1,11 +1,14 @@
+import multiprocessing as mp
 from queue import Queue
+from types import SimpleNamespace
 
 import pytest
 
 from gvc.codec import MAT_CODECS
-from gvc.data_structures.consts import CodecID
+from gvc.data_structures.consts import BinarizationID, CodecID
 from gvc.decoder import Decoder
-from gvc.encoder import Encoder, worker_writer
+from gvc.encoder import Encoder, run_multiprocessing, worker_writer
+from gvc.multiprocessing import MultiprocessingEncodeError
 
 from tests.mp_test_codec import decode as mp_decode
 from tests.mp_test_codec import encode as mp_encode
@@ -16,12 +19,22 @@ from tests.test_file_roundtrip import (
 )
 
 
-def test_multiprocessing_encoder_matches_single_process(monkeypatch, tmp_path):
-    # The hosted Linux gate uses fork, so the test codec registry is inherited
-    # by worker processes. Process-free ordering tests below remain portable
-    # and cover the writer protocol independently of the start method.
-    import multiprocessing as mp
+class DummyEvent:
+    def __init__(self):
+        self._set = False
 
+    def is_set(self):
+        return self._set
+
+    def set(self):
+        self._set = True
+
+
+def _status_queue():
+    return Queue()
+
+
+def test_multiprocessing_encoder_matches_single_process(monkeypatch, tmp_path):
     if mp.get_start_method() != "fork":
         pytest.skip("real multiprocessing codec test requires fork start method")
 
@@ -45,7 +58,6 @@ def test_multiprocessing_encoder_matches_single_process(monkeypatch, tmp_path):
     Encoder(str(VCF_FIXTURE), str(single), num_threads=0, **common).run()
     Encoder(str(VCF_FIXTURE), str(multi), num_threads=2, **common).run()
 
-    # Worker scheduling must not affect serialized block order or metadata.
     assert multi.read_bytes() == single.read_bytes()
 
     decoder = Decoder(str(multi), str(tmp_path / "decoded.txt"))
@@ -58,8 +70,11 @@ def test_multiprocessing_encoder_matches_single_process(monkeypatch, tmp_path):
 
 def test_writer_orders_out_of_order_worker_results(monkeypatch, tmp_path):
     from gvc import encoder as encoder_module
+    from gvc.multiprocessing import EncodedBlock, WorkerDone, WriterDone
 
     queue = Queue()
+    status = _status_queue()
+    stop = DummyEvent()
     stored = []
 
     class FakeParameterSet:
@@ -91,22 +106,34 @@ def test_writer_orders_out_of_order_worker_results(monkeypatch, tmp_path):
         fake_store_access_unit,
     )
 
-    # Deliberately emulate workers finishing 2, 0, 1.
-    queue.put((2, parameter_set, FakeBlock(2)))
-    queue.put((0, parameter_set, FakeBlock(0)))
-    queue.put((1, parameter_set, FakeBlock(1)))
-    queue.put(None)
-    queue.put(None)
+    queue.put(EncodedBlock(2, parameter_set, FakeBlock(2)))
+    queue.put(EncodedBlock(0, parameter_set, FakeBlock(0)))
+    queue.put(EncodedBlock(1, parameter_set, FakeBlock(1)))
+    queue.put(WorkerDone(0))
+    queue.put(WorkerDone(1))
 
     output = tmp_path / "ordered.gvc"
-    worker_writer(queue, str(output), num_processes=2)
+    worker_writer(
+        queue,
+        status,
+        stop,
+        str(output),
+        num_processes=2,
+    )
 
     assert stored == [0, 1, 2]
     assert output.read_bytes() == b"P\x00\x01\x02"
+    done = status.get_nowait()
+    assert isinstance(done, WriterDone)
+    assert done.total_blocks == 3
 
 
 def test_writer_rejects_missing_block(tmp_path):
+    from gvc.multiprocessing import EncodedBlock, WorkerDone
+
     queue = Queue()
+    status = _status_queue()
+    stop = DummyEvent()
     parameter_set = type(
         "FakeParameterSet",
         (),
@@ -118,8 +145,78 @@ def test_writer_rejects_missing_block(tmp_path):
     )()
     block = type("FakeBlock", (), {"__len__": lambda self: 1})()
 
-    queue.put((1, parameter_set, block))
-    queue.put(None)
+    queue.put(EncodedBlock(1, parameter_set, block))
+    queue.put(WorkerDone(0))
 
     with pytest.raises(RuntimeError, match="missing encoded block"):
-        worker_writer(queue, str(tmp_path / "missing.gvc"), num_processes=1)
+        worker_writer(
+            queue,
+            status,
+            stop,
+            str(tmp_path / "missing.gvc"),
+            num_processes=1,
+        )
+
+
+def test_reader_failure_preserves_existing_final_artifacts(tmp_path):
+    final = tmp_path / "existing.gvc"
+    final.write_bytes(b"ORIGINAL")
+    metadata = tmp_path / "existing.gvc.metadata"
+    metadata.mkdir()
+    (metadata / "marker.txt").write_text("ORIGINAL-METADATA")
+
+    before_children = {proc.pid for proc in mp.active_children()}
+    with pytest.raises(MultiprocessingEncodeError, match="reader"):
+        run_multiprocessing(
+            str(tmp_path / "not-a-vcf.txt"),
+            str(final),
+            block_size=2,
+            ps_params=[
+                BinarizationID.BIT_PLANE,
+                CodecID.JBIG1,
+                2,
+                False,
+                False,
+                False,
+            ],
+            tsp_params=["ham", "nn", 0],
+            num_processes=2,
+            stall_timeout=5,
+        )
+
+    assert final.read_bytes() == b"ORIGINAL"
+    assert (metadata / "marker.txt").read_text() == "ORIGINAL-METADATA"
+    assert not list(tmp_path.glob("existing.gvc.tmp.*"))
+    assert not list(tmp_path.glob("existing.gvc.tmp.*.metadata"))
+
+    after_children = {proc.pid for proc in mp.active_children()}
+    assert after_children <= before_children
+
+
+def test_parallel_encoder_rejects_invalid_worker_count(tmp_path):
+    with pytest.raises(ValueError, match="positive"):
+        run_multiprocessing(
+            str(VCF_FIXTURE),
+            str(tmp_path / "bad.gvc"),
+            2,
+            [],
+            [],
+            0,
+        )
+
+
+def test_supervisor_error_carries_stage_information(tmp_path):
+    with pytest.raises(MultiprocessingEncodeError) as exc_info:
+        run_multiprocessing(
+            str(tmp_path / "invalid.input"),
+            str(tmp_path / "never.gvc"),
+            block_size=1,
+            ps_params=[],
+            tsp_params=[],
+            num_processes=1,
+            stall_timeout=5,
+        )
+
+    assert exc_info.value.errors
+    assert any(error.stage == "reader" for error in exc_info.value.errors)
+    assert "Invalid Format" in str(exc_info.value)
