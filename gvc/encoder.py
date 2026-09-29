@@ -3,6 +3,8 @@ import typing as t
 import copy as cp
 import logging as log
 import multiprocessing as mp
+import os
+import queue
 
 import gvc.common
 from . import data_structures as ds
@@ -10,6 +12,16 @@ from . import reader
 from .binarization import binarize_allele_matrix, BINARIZATION_STR2ID
 from .sort import sort
 from .codec import CODEC_STR2ID, encode
+from .multiprocessing import (
+    EncodedBlock,
+    EncodeProcessSupervisor,
+    ReaderDone,
+    StopWork,
+    WorkItem,
+    WorkerDone,
+    WriterDone,
+)
+from .multiprocessing.supervisor import child_entry
 
 def run_core(
     raw_block:t.List, 
@@ -149,6 +161,35 @@ def run_no_threads(
             log.info('Store the remaining blocks')
             gvc.common.store_access_unit(output_f, acc_unit_id, ac_unit_param_set, blocks)
             
+def _queue_put(target_queue, item, stop_event, timeout=0.2):
+    while not stop_event.is_set():
+        try:
+            target_queue.put(item, timeout=timeout)
+            return True
+        except queue.Full:
+            continue
+    return False
+
+
+def _queue_get(source_queue, stop_event, timeout=0.2):
+    while not stop_event.is_set():
+        try:
+            return source_queue.get(timeout=timeout)
+        except queue.Empty:
+            continue
+    return None
+
+
+def _temp_output_path(output_fpath):
+    return "{}.tmp.{}".format(output_fpath, os.getpid())
+
+
+class _BlockProcessingError(RuntimeError):
+    def __init__(self, block_id, message):
+        self.block_id = block_id
+        super().__init__(message)
+
+
 def run_multiprocessing(
     input_fpath,
     output_fpath,
@@ -156,52 +197,107 @@ def run_multiprocessing(
     ps_params,
     tsp_params,
     num_processes,
+    start_method=None,
+    stall_timeout=None,
 ):
     if not isinstance(num_processes, int) or isinstance(num_processes, bool):
         raise TypeError("num_processes must be an integer")
     if num_processes < 1:
         raise ValueError("num_processes must be positive")
 
-    queue_a = mp.Queue(maxsize=max(1, num_processes * 2))
-    queue_b = mp.Queue(maxsize=max(1, num_processes * 2))
-
-    reader_proc = mp.Process(
-        name="Reader",
-        target=worker_reader,
-        args=(queue_a, input_fpath, output_fpath, block_size, num_processes),
+    context = (
+        mp.get_context(start_method)
+        if start_method is not None
+        else mp.get_context()
     )
-    encoder_procs = [
-        mp.Process(
-            name="Encoder{:02d}".format(i_worker),
-            target=worker_encoder,
-            args=(queue_a, queue_b, ps_params, tsp_params),
-        )
-        for i_worker in range(num_processes)
-    ]
-    writer_proc = mp.Process(
-        name="Writer",
-        target=worker_writer,
-        args=(queue_b, output_fpath, num_processes),
+    work_q = context.Queue(maxsize=max(1, num_processes * 2))
+    result_q = context.Queue(maxsize=max(1, num_processes * 2))
+    error_q = context.Queue()
+    status_q = context.Queue()
+    stop_event = context.Event()
+
+    temp_output = _temp_output_path(output_fpath)
+
+    reader_proc = context.Process(
+        name="GVC-Reader",
+        target=child_entry,
+        args=(
+            "reader",
+            None,
+            error_q,
+            stop_event,
+            worker_reader,
+            (
+                work_q,
+                status_q,
+                stop_event,
+                input_fpath,
+                temp_output,
+                block_size,
+                num_processes,
+            ),
+        ),
     )
+    reader_proc._gvc_stage = "reader"
+    reader_proc._gvc_worker_id = None
 
-    procs = [reader_proc] + encoder_procs + [writer_proc]
-    for proc in procs:
-        proc.start()
-
-    for proc in procs:
-        proc.join()
-
-    failures = [
-        "{} exited with status {}".format(proc.name, proc.exitcode)
-        for proc in procs
-        if proc.exitcode != 0
-    ]
-    queue_a.close()
-    queue_b.close()
-    if failures:
-        raise RuntimeError(
-            "multiprocessing encoder failed: {}".format("; ".join(failures))
+    encoder_procs = []
+    for worker_id in range(num_processes):
+        proc = context.Process(
+            name="GVC-Encoder{:02d}".format(worker_id),
+            target=child_entry,
+            args=(
+                "encoder",
+                worker_id,
+                error_q,
+                stop_event,
+                worker_encoder,
+                (
+                    worker_id,
+                    work_q,
+                    result_q,
+                    stop_event,
+                    ps_params,
+                    tsp_params,
+                ),
+            ),
         )
+        proc._gvc_stage = "encoder"
+        proc._gvc_worker_id = worker_id
+        encoder_procs.append(proc)
+
+    writer_proc = context.Process(
+        name="GVC-Writer",
+        target=child_entry,
+        args=(
+            "writer",
+            None,
+            error_q,
+            stop_event,
+            worker_writer,
+            (
+                result_q,
+                status_q,
+                stop_event,
+                temp_output,
+                num_processes,
+            ),
+        ),
+    )
+    writer_proc._gvc_stage = "writer"
+    writer_proc._gvc_worker_id = None
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[reader_proc] + encoder_procs + [writer_proc],
+        error_q=error_q,
+        status_q=status_q,
+        stop_event=stop_event,
+        queues=[work_q, result_q],
+        temp_output=temp_output,
+        final_output=output_fpath,
+        stall_timeout=stall_timeout,
+    )
+    return supervisor.run()
 
 class Encoder(object):
 
@@ -294,7 +390,9 @@ class Encoder(object):
 
 
 def worker_reader(
-    queue_a,
+    work_q,
+    status_q,
+    stop_event,
     input_fpath,
     output_fpath,
     block_size,
@@ -306,34 +404,59 @@ def worker_reader(
     ):
         raise ValueError("Invalid Format")
 
-    try:
-        iterator = gvc.reader.vcf_genotypes_reader(
-            input_fpath, output_fpath, block_size
-        )
-        for block_id, raw_block in enumerate(iterator):
-            log.info(
-                "Adding block {} with size {}".format(
-                    block_id, raw_block[0].shape[0]
-                )
-            )
-            queue_a.put((block_id, cp.copy(raw_block)))
-    finally:
-        # One sentinel per worker: no worker has to put a sentinel back into
-        # the queue, which avoids races and makes shutdown deterministic.
-        for _ in range(num_processes):
-            queue_a.put(None)
-
-
-def worker_encoder(queue_a, queue_b, ps_params, tsp_params):
-    while True:
-        item = queue_a.get()
-        if item is None:
-            queue_b.put(None)
+    iterator = gvc.reader.vcf_genotypes_reader(
+        input_fpath, output_fpath, block_size
+    )
+    total_blocks = 0
+    for block_id, raw_block in enumerate(iterator):
+        if stop_event.is_set():
             return
+        item = WorkItem(block_id, cp.copy(raw_block))
+        if not _queue_put(work_q, item, stop_event):
+            return
+        total_blocks += 1
 
-        block_id, raw_block = item
-        block, new_param_set = run_core(raw_block, ps_params, tsp_params)
-        queue_b.put((block_id, new_param_set, block))
+    for _ in range(num_processes):
+        if not _queue_put(work_q, StopWork(), stop_event):
+            return
+    _queue_put(status_q, ReaderDone(total_blocks), stop_event)
+
+
+def worker_encoder(
+    worker_id,
+    work_q,
+    result_q,
+    stop_event,
+    ps_params,
+    tsp_params,
+):
+    while not stop_event.is_set():
+        item = _queue_get(work_q, stop_event)
+        if item is None:
+            return
+        if isinstance(item, StopWork):
+            _queue_put(result_q, WorkerDone(worker_id), stop_event)
+            return
+        if not isinstance(item, WorkItem):
+            raise TypeError(
+                "unexpected work-queue message: {}".format(type(item).__name__)
+            )
+
+        try:
+            block, new_param_set = run_core(
+                item.raw_block, ps_params, tsp_params
+            )
+        except BaseException as exc:
+            raise _BlockProcessingError(
+                item.block_id, str(exc)
+            ) from exc
+
+        if not _queue_put(
+            result_q,
+            EncodedBlock(item.block_id, new_param_set, block),
+            stop_event,
+        ):
+            return
 
 
 def _store_ordered_block(
@@ -363,11 +486,7 @@ def _store_ordered_block(
         blocks.clear()
 
         stored_match = next(
-            (
-                stored
-                for stored in param_sets
-                if stored == new_param_set
-            ),
+            (stored for stored in param_sets if stored == new_param_set),
             None,
         )
         if stored_match is None:
@@ -382,7 +501,13 @@ def _store_ordered_block(
     state["parameter_set"] = ac_unit_param_set
 
 
-def worker_writer(queue_b, output_fpath, num_processes):
+def worker_writer(
+    result_q,
+    status_q,
+    stop_event,
+    output_fpath,
+    num_processes,
+):
     if num_processes < 1:
         raise ValueError("num_processes must be positive")
 
@@ -395,20 +520,33 @@ def worker_writer(queue_b, output_fpath, num_processes):
     pending = {}
     next_block_id = 0
     stopped_workers = 0
+    written_blocks = 0
 
     with open(output_fpath, "wb") as output_f:
-        while stopped_workers < num_processes:
-            item = queue_b.get()
+        while (
+            stopped_workers < num_processes
+            and not stop_event.is_set()
+        ):
+            item = _queue_get(result_q, stop_event)
             if item is None:
+                return
+
+            if isinstance(item, WorkerDone):
                 stopped_workers += 1
                 continue
+            if not isinstance(item, EncodedBlock):
+                raise TypeError(
+                    "unexpected result-queue message: {}".format(
+                        type(item).__name__
+                    )
+                )
 
-            block_id, new_param_set, block = item
+            block_id = item.block_id
             if block_id in pending or block_id < next_block_id:
                 raise ValueError(
                     "duplicate or stale encoded block id {}".format(block_id)
                 )
-            pending[block_id] = (new_param_set, block)
+            pending[block_id] = (item.parameter_set, item.block)
 
             while next_block_id in pending:
                 current_param_set, current_block = pending.pop(next_block_id)
@@ -419,12 +557,13 @@ def worker_writer(queue_b, output_fpath, num_processes):
                     state,
                 )
                 next_block_id += 1
+                written_blocks += 1
 
+        if stop_event.is_set():
+            return
         if pending:
             raise RuntimeError(
-                "missing encoded block before block {}".format(
-                    min(pending)
-                )
+                "missing encoded block before block {}".format(min(pending))
             )
 
         if state["blocks"]:
@@ -434,6 +573,9 @@ def worker_writer(queue_b, output_fpath, num_processes):
                 state["parameter_set"],
                 state["blocks"],
             )
+        output_f.flush()
+        os.fsync(output_f.fileno())
 
+    _queue_put(status_q, WriterDone(written_blocks), stop_event)
     log.info("Stop")
 
