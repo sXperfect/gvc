@@ -25,6 +25,8 @@ All notable changes to this repository will be documented here.
 
 ### Changed
 
+- The Python 3.8 resolver probe promoted setuptools 75.3.4 as the reviewed
+  build-tool ceiling after detecting it as the newest compatible release.
 - GVC 1.0.x uses Cython 3.2.9 as its Python-3.8 build baseline while newer
   interpreters can resolve Cython 3.3+.
 - GVC 1.0.x now starts from the newest scientific-stack generation compatible
