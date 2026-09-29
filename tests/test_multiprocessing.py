@@ -14,7 +14,7 @@ VCF_FIXTURE = Path(__file__).parent / "fixtures" / "tiny_diploid.vcf"
 @pytest.mark.skipif(os.name == "nt", reason="fork-based worker inheritance is POSIX-only")
 def test_multiprocessing_encoder_matches_sequential_output(tmp_path):
     script = textwrap.dedent(
-        """
+        r"""
         import multiprocessing as mp
         from io import BytesIO
         from pathlib import Path
