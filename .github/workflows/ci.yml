@@ -46,7 +46,6 @@ jobs:
           python -m pip check
           python scripts/check_py38_latest.py
           python scripts/ci.py all
-          PIP_CONSTRAINT=ci/constraints/py38-latest.txt python scripts/ci.py packaging
           python scripts/ci.py optional
           deactivate
 
