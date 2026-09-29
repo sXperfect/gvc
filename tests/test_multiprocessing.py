@@ -1,109 +1,117 @@
-import os
-from pathlib import Path
-import subprocess
-import sys
-import textwrap
+from queue import Queue
 
 import pytest
 
+from gvc.codec import MAT_CODECS
+from gvc.data_structures.consts import CodecID
+from gvc.decoder import Decoder
+from gvc.encoder import Encoder, worker_writer
 
-ROOT = Path(__file__).resolve().parents[1]
-VCF_FIXTURE = Path(__file__).parent / "fixtures" / "tiny_diploid.vcf"
+from tests.mp_test_codec import decode as mp_decode
+from tests.mp_test_codec import encode as mp_encode
+from tests.test_file_roundtrip import (
+    EXPECTED_GT,
+    VCF_FIXTURE,
+    _close_decoder,
+)
 
 
-@pytest.mark.skipif(os.name == "nt", reason="fork-based worker inheritance is POSIX-only")
-def test_multiprocessing_encoder_matches_sequential_output(tmp_path):
-    script = textwrap.dedent(
-        r"""
-        import multiprocessing as mp
-        from io import BytesIO
-        from pathlib import Path
-        import sys
+def test_multiprocessing_encoder_matches_single_process(monkeypatch, tmp_path):
+    codec = MAT_CODECS[CodecID.JBIG1]
+    monkeypatch.setitem(codec, "encoder", mp_encode)
+    monkeypatch.setitem(codec, "decoder", mp_decode)
 
-        import numpy as np
+    single = tmp_path / "single.gvc"
+    multi = tmp_path / "multi.gvc"
 
-        mp.set_start_method("fork", force=True)
+    common = dict(
+        binarization_name="bit_plane",
+        axis=2,
+        sort_rows=False,
+        sort_cols=False,
+        transpose=False,
+        block_size=1,
+        codec_name="jbig",
+        preset_mode=0,
+    )
+    Encoder(str(VCF_FIXTURE), str(single), num_threads=0, **common).run()
+    Encoder(str(VCF_FIXTURE), str(multi), num_threads=2, **common).run()
 
-        from gvc.codec import MAT_CODECS
-        from gvc.codec.jbig import BIE_HEADER_LEN
-        from gvc.data_structures.consts import CodecID
-        from gvc.decoder import Decoder
-        from gvc.encoder import Encoder
+    # Worker scheduling must not affect serialized block order or metadata.
+    assert multi.read_bytes() == single.read_bytes()
 
-        fixture = Path(sys.argv[1])
-        root = Path(sys.argv[2])
-        sequential = root / "sequential.gvc"
-        parallel = root / "parallel.gvc"
+    decoder = Decoder(str(multi), str(tmp_path / "decoded.txt"))
+    try:
+        decoder.decode()
+    finally:
+        _close_decoder(decoder)
+    assert (tmp_path / "decoded.txt").read_text() == EXPECTED_GT
 
-        def encode_matrix(matrix):
-            matrix = np.asarray(matrix)
-            header = bytearray(BIE_HEADER_LEN)
-            header[4:8] = int(matrix.shape[1]).to_bytes(4, "big")
-            header[8:12] = int(matrix.shape[0]).to_bytes(4, "big")
-            payload = BytesIO()
-            np.save(payload, matrix, allow_pickle=False)
-            return bytes(header) + payload.getvalue()
 
-        def decode_matrix(payload):
-            payload = bytes(payload)
-            return np.load(BytesIO(payload[BIE_HEADER_LEN:]), allow_pickle=False)
+def test_writer_orders_out_of_order_worker_results(monkeypatch, tmp_path):
+    from gvc import encoder as encoder_module
 
-        MAT_CODECS[CodecID.JBIG1]["encoder"] = encode_matrix
-        MAT_CODECS[CodecID.JBIG1]["decoder"] = decode_matrix
+    queue = Queue()
+    stored = []
 
-        common = dict(
-            binarization_name="bit_plane",
-            axis=2,
-            sort_rows=False,
-            sort_cols=False,
-            transpose=False,
-            block_size=1,
-            dist="ham",
-            solver="nn",
-            codec_name="jbig",
-            preset_mode=0,
-        )
+    class FakeParameterSet:
+        parameter_set_id = 0
 
-        Encoder(str(fixture), str(sequential), num_threads=0, **common).run()
-        Encoder(str(fixture), str(parallel), num_threads=2, **common).run()
+        def __eq__(self, other):
+            return isinstance(other, FakeParameterSet)
 
-        assert sequential.read_bytes() == parallel.read_bytes()
+        def to_bytes(self):
+            return b"P"
 
-        for name in ("main.npy", "samples.npy", "0.npy", "1.npy", "2.npy"):
-            left = Path(str(sequential) + ".metadata") / name
-            right = Path(str(parallel) + ".metadata") / name
-            np.testing.assert_array_equal(
-                np.load(left, allow_pickle=False),
-                np.load(right, allow_pickle=False),
-            )
+    class FakeBlock:
+        def __init__(self, value):
+            self.value = value
 
-        for encoded, name in ((sequential, "seq.txt"), (parallel, "par.txt")):
-            decoded = root / name
-            decoder = Decoder(str(encoded), str(decoded))
-            try:
-                decoder.decode()
-            finally:
-                if decoder._out_f is not None:
-                    decoder._out_f.close()
-                decoder._f.close()
+        def __len__(self):
+            return 1
 
-        expected = "0|1\t1/1\n2/1\t0|2\n./.\t1|0\n"
-        assert (root / "seq.txt").read_text() == expected
-        assert (root / "par.txt").read_text() == expected
-        """
+    parameter_set = FakeParameterSet()
+
+    def fake_store_access_unit(output_f, access_unit_id, param_set, blocks):
+        values = [block.value for block in blocks]
+        stored.extend(values)
+        output_f.write(bytes(values))
+
+    monkeypatch.setattr(
+        encoder_module.gvc.common,
+        "store_access_unit",
+        fake_store_access_unit,
     )
 
-    result = subprocess.run(
-        [sys.executable, "-c", script, str(VCF_FIXTURE), str(tmp_path)],
-        cwd=str(ROOT),
-        text=True,
-        capture_output=True,
-        timeout=30,
-        check=False,
-    )
-    assert result.returncode == 0, (
-        "multiprocessing regression failed\nstdout:\n{}\nstderr:\n{}".format(
-            result.stdout,
-            result.stderr,
-        )
-    )
+    # Deliberately emulate workers finishing 2, 0, 1.
+    queue.put((2, parameter_set, FakeBlock(2)))
+    queue.put((0, parameter_set, FakeBlock(0)))
+    queue.put((1, parameter_set, FakeBlock(1)))
+    queue.put(None)
+    queue.put(None)
+
+    output = tmp_path / "ordered.gvc"
+    worker_writer(queue, str(output), num_processes=2)
+
+    assert stored == [0, 1, 2]
+    assert output.read_bytes() == b"P\x00\x01\x02"
+
+
+def test_writer_rejects_missing_block(tmp_path):
+    queue = Queue()
+    parameter_set = type(
+        "FakeParameterSet",
+        (),
+        {
+            "parameter_set_id": 0,
+            "to_bytes": lambda self: b"P",
+            "__eq__": lambda self, other: True,
+        },
+    )()
+    block = type("FakeBlock", (), {"__len__": lambda self: 1})()
+
+    queue.put((1, parameter_set, block))
+    queue.put(None)
+
+    with pytest.raises(RuntimeError, match="missing encoded block"):
+        worker_writer(queue, str(tmp_path / "missing.gvc"), num_processes=1)
