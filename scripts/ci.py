@@ -253,7 +253,7 @@ GATES = {
 
 
 def all_gates():
-    for name in ("metadata", "syntax", "native", "test", "cli", "deps"):
+    for name in ("metadata", "syntax", "native", "test", "cli", "packaging", "deps"):
         print("\n== {} ==".format(name), flush=True)
         status = GATES[name]()
         if status:

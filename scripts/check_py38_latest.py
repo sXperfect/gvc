@@ -14,7 +14,8 @@ EXPECTED = {
     "Pillow": "10.4.0",
     "pytest": "8.3.5",
     "Cython": "3.2.9",
-    "build": "1.2.2",
+    "setuptools": "75.3.2",
+    "wheel": "0.45.1",
     "build": "1.2.2.post1",
 }
 

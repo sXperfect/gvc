@@ -19,6 +19,7 @@ All notable changes to this repository will be documented here.
   CLI parsing, and end-to-end codec pipeline round trips.
 - Cross-version CI coverage for Python 3.8 through 3.14, with Python 3.8 as the reviewed compatibility anchor.
 - Dependency-resolution reporting and optional-dependency smoke checks.
+- Python 3.8 wheel and sdist build/install smoke tests from outside the source checkout.
 - Python 3.8 wheel/sdist build-and-install isolation gate with native-extension and installed-CLI smoke tests.
 - Explicit source-distribution manifest for the Cython `.pyx` build sources.
 
