@@ -329,3 +329,43 @@ def test_encoder_exposes_supervisor_configuration(tmp_path):
     )
     assert encoder.multiprocessing_start_method == "spawn"
     assert encoder.multiprocessing_stall_timeout == 30
+
+
+
+def _sleep_forever():
+    import time
+
+    time.sleep(60)
+
+
+def test_supervisor_watchdog_terminates_stalled_child(tmp_path):
+    import multiprocessing as local_mp
+
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    context = local_mp.get_context()
+    error_q = context.Queue()
+    status_q = context.Queue()
+    stop_event = context.Event()
+    stalled = context.Process(name="GVC-Stalled", target=_sleep_forever)
+    stalled._gvc_stage = "test"
+    stalled._gvc_worker_id = 0
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[stalled],
+        error_q=error_q,
+        status_q=status_q,
+        stop_event=stop_event,
+        queues=[],
+        temp_output=tmp_path / "stalled.tmp",
+        final_output=tmp_path / "stalled.gvc",
+        stall_timeout=0.2,
+        poll_interval=0.05,
+        graceful_timeout=0.1,
+    )
+
+    with pytest.raises(MultiprocessingEncodeError, match="no multiprocessing progress"):
+        supervisor.run()
+
+    assert not stalled.is_alive()
+    assert not (tmp_path / "stalled.gvc").exists()
