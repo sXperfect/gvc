@@ -182,6 +182,32 @@ def _queue_get(source_queue, stop_event, timeout=0.2):
     return None
 
 
+def _validate_parallel_output_path(output_fpath):
+    output_path = os.path.abspath(output_fpath)
+    parent = os.path.dirname(output_path) or os.getcwd()
+    if not os.path.exists(parent):
+        raise FileNotFoundError(
+            "output directory does not exist: {}".format(parent)
+        )
+    if not os.path.isdir(parent):
+        raise NotADirectoryError(
+            "output parent is not a directory: {}".format(parent)
+        )
+    if os.path.isdir(output_path):
+        raise IsADirectoryError(
+            "output path is a directory: {}".format(output_path)
+        )
+
+    metadata_path = output_path + ".metadata"
+    if os.path.exists(metadata_path) and not os.path.isdir(metadata_path):
+        raise NotADirectoryError(
+            "metadata sidecar path is not a directory: {}".format(
+                metadata_path
+            )
+        )
+    return output_path
+
+
 def _temp_output_path(output_fpath):
     return "{}.tmp.{}.{}".format(
         output_fpath,
@@ -210,6 +236,8 @@ def run_multiprocessing(
         raise TypeError("num_processes must be an integer")
     if num_processes < 1:
         raise ValueError("num_processes must be positive")
+
+    output_fpath = _validate_parallel_output_path(output_fpath)
 
     context = (
         mp.get_context(start_method)

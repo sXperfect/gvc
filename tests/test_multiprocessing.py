@@ -123,9 +123,12 @@ def test_writer_orders_out_of_order_worker_results(monkeypatch, tmp_path):
 
     assert stored == [0, 1, 2]
     assert output.read_bytes() == b"P\x00\x01\x02"
-    done = status.get_nowait()
-    assert isinstance(done, WriterDone)
-    assert done.total_blocks == 3
+    statuses = []
+    while not status.empty():
+        statuses.append(status.get_nowait())
+    done = [item for item in statuses if isinstance(item, WriterDone)]
+    assert len(done) == 1
+    assert done[0].total_blocks == 3
 
 
 def test_writer_rejects_missing_block(tmp_path):
@@ -369,3 +372,42 @@ def test_supervisor_watchdog_terminates_stalled_child(tmp_path):
 
     assert not stalled.is_alive()
     assert not (tmp_path / "stalled.gvc").exists()
+
+
+
+def test_parallel_encoder_rejects_unsafe_output_paths(tmp_path):
+    output_dir = tmp_path / "directory.gvc"
+    output_dir.mkdir()
+    with pytest.raises(IsADirectoryError):
+        run_multiprocessing(
+            str(VCF_FIXTURE),
+            str(output_dir),
+            2,
+            [],
+            [],
+            1,
+        )
+
+    missing_parent = tmp_path / "does-not-exist" / "out.gvc"
+    with pytest.raises(FileNotFoundError, match="output directory"):
+        run_multiprocessing(
+            str(VCF_FIXTURE),
+            str(missing_parent),
+            2,
+            [],
+            [],
+            1,
+        )
+
+    final = tmp_path / "metadata-file.gvc"
+    sidecar = tmp_path / "metadata-file.gvc.metadata"
+    sidecar.write_text("not-a-directory")
+    with pytest.raises(NotADirectoryError, match="metadata"):
+        run_multiprocessing(
+            str(VCF_FIXTURE),
+            str(final),
+            2,
+            [],
+            [],
+            1,
+        )
