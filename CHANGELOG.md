@@ -28,6 +28,10 @@ All notable changes to this repository will be documented here.
 - A parent-supervised multiprocessing pipeline with structured errors,
   bounded backpressure, progress/watchdog support, transactional output,
   failure cleanup, and fork/spawn lifecycle coverage.
+- A maintained JBIG-KIT subprocess integration with executable discovery,
+  timeout/error validation, and real codec release-gate tests.
+- A pinned historical LUH VCF compatibility gate sourced from upstream commit
+  f9af2127a2ff0b87727924860e33f1905fd507cd.
 - Complete file-level Encoder/Decoder regression coverage for bit-plane,
   row-bin-split, and haploid VCF inputs.
 - Random-access index, BinMat framing, and standalone libgvc safety tests.

@@ -29,6 +29,22 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Install JBIG-KIT release dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jbigkit-bin
+          command -v pbmtojbg85
+          command -v jbgtopbm85
+
+      - name: Fetch pinned LUH historical fixture
+        run: |
+          mkdir -p tmp/historical
+          curl --fail --location --retry 3 \
+            https://raw.githubusercontent.com/tnt-LUH/gvc/f9af2127a2ff0b87727924860e33f1905fd507cd/tests/test_block01.vcf.gz \
+            --output tmp/historical/test_block01.vcf.gz
+          test "$(git hash-object tmp/historical/test_block01.vcf.gz)" = \
+            "af45a419e46563906ac51fad0be869291316cea9"
+
       - name: Set up Python 3.8
         uses: actions/setup-python@v5
         with:
@@ -45,7 +61,10 @@ jobs:
             python -m pip install --only-binary=:all: --upgrade --upgrade-strategy eager -e ".[test,all]"
           python -m pip check
           python scripts/check_py38_latest.py
-          python scripts/ci.py all
+          GVC_REQUIRE_JBIGKIT=1 \
+          GVC_HISTORICAL_FIXTURE="$PWD/tmp/historical/test_block01.vcf.gz" \
+          GVC_HISTORICAL_MAX_BLOCKS=1 \
+            python scripts/ci.py all
           python scripts/ci.py optional
           deactivate
 

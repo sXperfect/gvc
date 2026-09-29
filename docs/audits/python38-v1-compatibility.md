@@ -35,7 +35,12 @@ The maintained test suite now covers:
   watchdog cancellation, and successful spawn-mode encoding with explicit
   child-process initialization;
 - wheel and sdist build/install isolation from outside the source checkout;
-- installed native-extension imports and installed CLI startup.
+- installed native-extension imports and installed CLI startup;
+- a true JBIG-KIT encode/decode smoke test using pbmtojbg85/jbgtopbm85;
+- the original LUH test_block01.vcf.gz fixture, fetched from pinned upstream
+  commit f9af2127a2ff0b87727924860e33f1905fd507cd and verified against Git blob
+  af45a419e46563906ac51fad0be869291316cea9, through both bit-plane and
+  row-bin-split core round trips on the Python 3.8 release gate.
 
 ## Correctness fixes found by the audit
 
@@ -67,12 +72,16 @@ The following checks cannot be fully represented by the self-contained hosted
 suite and should be performed before declaring a production 1.0.x release:
 
 1. Decode representative historical .gvc files produced by the original LUH
-   implementation, not only synthetic structural golden fixtures.
-2. Run encode/decode with the actual chosen external JBIG executable and verify
-   byte/shape interoperability. The hosted tests intentionally inject an
-   in-memory codec and do not validate a third-party JBIG binary.
-3. Run the historical large VCF fixtures (including test_block01.vcf.gz) and
-   compare reconstructed genotypes against the source data.
+   implementation, not only synthetic structural golden fixtures. Hosted CI
+   now covers the original LUH VCF input fixture but no historical .gvc artifact
+   was present in the upstream repository.
+2. Run the historical large VCF fixture through the complete production-scale
+   workload (all blocks and expensive sorting combinations). Hosted CI validates
+   a pinned 2048-variant block through both binarization schemes with real
+   JBIG-KIT to keep runtime bounded.
+3. Exercise real JBIG-KIT under higher process concurrency and production-size
+   matrices. Hosted CI now verifies actual pbmtojbg85/jbgtopbm85 interoperability
+   on small matrices and the pinned LUH fixture.
 4. Exercise random-access queries against real production-scale metadata
    sidecars; hosted CI covers the same behavior on deterministic tiny fixtures.
 5. Stress the multiprocessing encoder beyond hosted two-worker and spawn-mode
