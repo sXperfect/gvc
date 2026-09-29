@@ -231,6 +231,8 @@ def run_multiprocessing(
     num_processes,
     start_method=None,
     stall_timeout=None,
+    process_initializer=None,
+    process_initializer_args=(),
 ):
     if not isinstance(num_processes, int) or isinstance(num_processes, bool):
         raise TypeError("num_processes must be an integer")
@@ -238,6 +240,13 @@ def run_multiprocessing(
         raise ValueError("num_processes must be positive")
 
     output_fpath = _validate_parallel_output_path(output_fpath)
+
+    if process_initializer is not None and not callable(process_initializer):
+        raise TypeError("process_initializer must be callable or None")
+    if process_initializer_args is None:
+        process_initializer_args = ()
+    else:
+        process_initializer_args = tuple(process_initializer_args)
 
     context = (
         mp.get_context(start_method)
@@ -270,6 +279,8 @@ def run_multiprocessing(
                 block_size,
                 num_processes,
             ),
+            None,
+            (),
         ),
     )
     reader_proc._gvc_stage = "reader"
@@ -295,6 +306,8 @@ def run_multiprocessing(
                     ps_params,
                     tsp_params,
                 ),
+                process_initializer,
+                process_initializer_args,
             ),
         )
         proc._gvc_stage = "encoder"
@@ -317,6 +330,8 @@ def run_multiprocessing(
                 temp_output,
                 num_processes,
             ),
+            None,
+            (),
         ),
     )
     writer_proc._gvc_stage = "writer"
@@ -353,6 +368,8 @@ class Encoder(object):
         num_threads=0,
         multiprocessing_start_method=None,
         multiprocessing_stall_timeout=None,
+        multiprocessing_initializer=None,
+        multiprocessing_initializer_args=(),
     ):
 
         self.input_fpath = input_fpath
@@ -379,6 +396,10 @@ class Encoder(object):
         self.num_threads = num_threads
         self.multiprocessing_start_method = multiprocessing_start_method
         self.multiprocessing_stall_timeout = multiprocessing_stall_timeout
+        self.multiprocessing_initializer = multiprocessing_initializer
+        self.multiprocessing_initializer_args = tuple(
+            multiprocessing_initializer_args or ()
+        )
         
     @property
     def ps_params(self):
@@ -421,6 +442,8 @@ class Encoder(object):
                 self.num_threads,
                 start_method=self.multiprocessing_start_method,
                 stall_timeout=self.multiprocessing_stall_timeout,
+                process_initializer=self.multiprocessing_initializer,
+                process_initializer_args=self.multiprocessing_initializer_args,
             )
 
         else:

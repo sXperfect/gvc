@@ -5,6 +5,7 @@ import queue
 import shutil
 import time
 import traceback
+import uuid
 from pathlib import Path
 
 from .messages import Progress, ReaderDone, WorkerError, WriterDone
@@ -37,9 +38,13 @@ def child_entry(
     stop_event,
     target,
     args,
+    initializer=None,
+    initializer_args=(),
 ):
-    """Run a child target and report exceptions before exiting non-zero."""
+    """Run one supervised child with optional process-local initialization."""
     try:
+        if initializer is not None:
+            initializer(*initializer_args)
         target(*args)
     except BaseException as exc:
         try:
@@ -299,7 +304,7 @@ class EncodeProcessSupervisor:
             str(path)
             + ".gvc-backup-{}-{}".format(
                 os.getpid(),
-                __import__("uuid").uuid4().hex,
+                uuid.uuid4().hex,
             )
         )
 
