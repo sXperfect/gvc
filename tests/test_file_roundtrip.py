@@ -266,3 +266,99 @@ def test_random_access_empty_interval_writes_nothing(framed_test_codec, tmp_path
         _close_decoder(decoder)
 
     assert selected.read_text() == ""
+
+
+
+def _encode_random_access_fixture(framed_test_codec, tmp_path, name):
+    encoded = tmp_path / (name + ".gvc")
+    Encoder(
+        str(VCF_FIXTURE),
+        str(encoded),
+        binarization_name="bit_plane",
+        axis=2,
+        sort_rows=False,
+        sort_cols=False,
+        block_size=2,
+        codec_name="jbig",
+        num_threads=0,
+    ).run()
+    return encoded
+
+
+def test_random_access_exact_boundaries_and_multi_block_span(
+    framed_test_codec,
+    tmp_path,
+):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "boundaries"
+    )
+
+    cases = [
+        ([100, 100], None, "0|1\t1/1\n"),
+        ([200, 200], None, "2/1\t0|2\n"),
+        ([300, 300], None, "./.\t1|0\n"),
+        ([100, 300], None, EXPECTED_GT),
+        ([200, 300], "SAMPLE_B", "0|2\n1|0\n"),
+    ]
+    for index, (position, samples, expected) in enumerate(cases):
+        selected = tmp_path / ("selection-{}.txt".format(index))
+        decoder = Decoder(str(encoded), str(selected))
+        try:
+            decoder.random_access(position, samples)
+        finally:
+            _close_decoder(decoder)
+        assert selected.read_text() == expected
+
+
+def test_random_access_preserves_requested_sample_order(
+    framed_test_codec,
+    tmp_path,
+):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "sample-order"
+    )
+    selected = tmp_path / "sample-order.txt"
+
+    decoder = Decoder(str(encoded), str(selected))
+    try:
+        decoder.random_access([100, 100], "SAMPLE_B;SAMPLE_A")
+    finally:
+        _close_decoder(decoder)
+
+    assert selected.read_text() == "1/1\t0|1\n"
+
+
+def test_random_access_rejects_invalid_interval_and_unknown_sample(
+    framed_test_codec,
+    tmp_path,
+):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "invalid-random-access"
+    )
+
+    decoder = Decoder(str(encoded))
+    try:
+        with pytest.raises(ValueError, match="start position"):
+            decoder.random_access([300, 100], None)
+        with pytest.raises(ValueError, match="unknown sample"):
+            decoder.random_access([100, 100], "DOES_NOT_EXIST")
+    finally:
+        _close_decoder(decoder)
+
+
+def test_random_access_requires_metadata(framed_test_codec, tmp_path):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "missing-metadata"
+    )
+    metadata = Path(str(encoded) + ".metadata")
+    for path in metadata.iterdir():
+        path.unlink()
+    metadata.rmdir()
+
+    decoder = Decoder(str(encoded))
+    try:
+        assert decoder.index is None
+        with pytest.raises(ValueError, match="metadata"):
+            decoder.random_access([100, 100], None)
+    finally:
+        _close_decoder(decoder)
