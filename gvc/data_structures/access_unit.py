@@ -3,9 +3,16 @@ import typing as t
 from . import consts
 from .block import Block
 from .data_unit import DataUnitHeader
-from .param_set import ParameterSet
 from ..bitstream import BitstreamReader
 from .. import utils
+
+
+def _fits_unsigned(value, length_bytes):
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and 0 <= value < (1 << (8 * length_bytes))
+    )
 
 
 def comp_blocks_size(blocks):
@@ -14,6 +21,20 @@ def comp_blocks_size(blocks):
 
 class AccessUnitHeader(DataUnitHeader):
     def __init__(self, content_len, access_unit_id, parameter_set_id, num_blocks):
+        fixed_content_len = (
+            consts.ACCESS_UNIT_ID_LEN
+            + consts.PARAMETER_SET_ID_LEN
+            + consts.NUM_BLOCKS_LEN
+        )
+        if content_len < fixed_content_len:
+            raise ValueError("access-unit content length is smaller than its header")
+        if not _fits_unsigned(access_unit_id, consts.ACCESS_UNIT_ID_LEN):
+            raise ValueError("access_unit_id is outside the serialized range")
+        if not _fits_unsigned(parameter_set_id, consts.PARAMETER_SET_ID_LEN):
+            raise ValueError("parameter_set_id is outside the serialized range")
+        if not _fits_unsigned(num_blocks, consts.NUM_BLOCKS_LEN):
+            raise ValueError("num_blocks is outside the serialized range")
+
         super().__init__(consts.DataUnitType.ACCESS_UNIT, content_len)
         self.access_unit_id = access_unit_id
         self.parameter_set_id = parameter_set_id
@@ -21,6 +42,7 @@ class AccessUnitHeader(DataUnitHeader):
 
     @classmethod
     def from_blocks(cls, access_unit_id, parameter_set_id, blocks):
+        blocks = list(blocks)
         content_len = (
             consts.ACCESS_UNIT_ID_LEN
             + consts.PARAMETER_SET_ID_LEN
@@ -65,6 +87,11 @@ class AccessUnitHeader(DataUnitHeader):
 
 class AccessUnit:
     def __init__(self, header: AccessUnitHeader, blocks: t.List[Block]):
+        if not isinstance(header, AccessUnitHeader):
+            raise TypeError("header must be an AccessUnitHeader")
+        blocks = list(blocks)
+        if any(not isinstance(block, Block) for block in blocks):
+            raise TypeError("access-unit blocks must be Block instances")
         if header.num_blocks != len(blocks):
             raise ValueError("access-unit header block count does not match payload")
         self.header = header
@@ -111,5 +138,6 @@ class AccessUnit:
 
     @classmethod
     def from_blocks(cls, access_unit_id, parameter_set_id, blocks):
+        blocks = list(blocks)
         header = AccessUnitHeader.from_blocks(access_unit_id, parameter_set_id, blocks)
-        return cls(header, list(blocks))
+        return cls(header, blocks)

@@ -1,10 +1,12 @@
 import numpy as np
 import pytest
 
-from gvc.bitstream import BitIO
-from gvc.data_structures import Block
+from gvc.bitstream import BitIO, BitstreamWriter
+from gvc.data_structures import AccessUnit, Block
 from gvc.data_structures.amax import VectorAMax
+from gvc.data_structures.access_unit import AccessUnitHeader
 from gvc.data_structures.block import BlockHeader
+from gvc.data_structures.data_unit import DataUnitHeader
 from gvc.data_structures.consts import BinarizationID, CodecID
 from gvc.data_structures.param_set import ParameterSet
 from gvc.data_structures.rc_id import RowColIds
@@ -98,3 +100,70 @@ def test_block_header_rejects_negative_payload_size():
 def test_block_requires_genotype_payload_type():
     with pytest.raises(TypeError):
         Block.from_encoded_variant(object())
+
+
+
+def test_serialized_header_ranges_are_explicit():
+    with pytest.raises(ValueError, match="data-unit type"):
+        DataUnitHeader(256, 0)
+    with pytest.raises(ValueError, match="data-unit length"):
+        DataUnitHeader(0, 1 << 32)
+
+    with pytest.raises(ValueError, match="access_unit_id"):
+        AccessUnitHeader(6, 1 << 32, 0, 0)
+    with pytest.raises(ValueError, match="parameter_set_id"):
+        AccessUnitHeader(6, 0, 256, 0)
+    with pytest.raises(ValueError, match="num_blocks"):
+        AccessUnitHeader(6, 0, 0, 256)
+
+    with pytest.raises(ValueError, match="payload size"):
+        BlockHeader(0, 1 << 32)
+
+
+def test_access_unit_rejects_non_block_payload():
+    header = AccessUnitHeader(6, 0, 0, 1)
+    with pytest.raises(TypeError, match="Block"):
+        AccessUnit(header, [object()])
+
+
+def test_permutation_requires_true_permutation():
+    with pytest.raises(ValueError, match="unique"):
+        RowColIds(np.array([0, 0, 2], dtype=np.uint16))
+    with pytest.raises(ValueError, match="valid range"):
+        RowColIds(np.array([1], dtype=np.uint16))
+
+
+def test_permutation_rejects_trailing_bytes():
+    permutation = RowColIds(np.array([2, 0, 3, 1], dtype=np.uint16))
+    with pytest.raises(ValueError, match="trailing"):
+        RowColIds.from_bytes(permutation.to_bytes() + b"\x00", 4)
+
+
+def test_amax_accepts_empty_but_rejects_negative_values_and_trailing_bytes():
+    empty = VectorAMax(np.array([], dtype=np.uint16))
+    encoded = empty.to_bitio().to_bytes(align=True)
+    assert VectorAMax.from_bytes(encoded).vector.size == 0
+
+    with pytest.raises(ValueError, match="positive"):
+        VectorAMax(np.array([1, -1], dtype=np.int16))
+
+    payload = VectorAMax(np.array([1, 2, 3], dtype=np.uint16)).to_bitio().to_bytes(
+        align=True
+    )
+    with pytest.raises(ValueError, match="trailing"):
+        VectorAMax.from_bytes(payload + b"\x00")
+
+
+def test_bit_writers_reject_negative_values_and_widths():
+    import io
+
+    with pytest.raises(ValueError, match="non-negative"):
+        BitIO().write(-1, 1)
+    with pytest.raises(ValueError, match="nbits"):
+        BitIO().write(0, -1)
+
+    writer = BitstreamWriter(io.BytesIO())
+    with pytest.raises(ValueError, match="non-negative"):
+        writer.write_bits(-1, 1)
+    with pytest.raises(ValueError, match="nbits"):
+        writer.write_bits(0, -1)

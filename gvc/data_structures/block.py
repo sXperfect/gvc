@@ -4,16 +4,26 @@ from ..bitstream import BitstreamReader
 from .. import utils
 
 
+def _fits_unsigned(value, length_bytes):
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and 0 <= value < (1 << (8 * length_bytes))
+    )
+
+
 class BlockHeader:
     def __init__(self, content_id, block_payload_size):
-        if block_payload_size < 0:
-            raise ValueError("block payload size must be non-negative")
+        if not _fits_unsigned(int(content_id), consts.CONTENT_ID_LEN):
+            raise ValueError("content_id is outside the serialized range")
+        if not _fits_unsigned(block_payload_size, consts.BLOCK_PAYLOAD_SIZE_LEN):
+            raise ValueError("block payload size is outside the serialized range")
         self.content_id = content_id
         self.block_payload_size = block_payload_size
 
     def to_bytes(self):
         return (
-            utils.int2bstr(self.content_id, consts.CONTENT_ID_LEN)
+            utils.int2bstr(int(self.content_id), consts.CONTENT_ID_LEN)
             + utils.int2bstr(
                 self.block_payload_size, consts.BLOCK_PAYLOAD_SIZE_LEN
             )
@@ -35,6 +45,12 @@ class BlockHeader:
 
 class Block:
     def __init__(self, block_header: BlockHeader, block_payload):
+        if not isinstance(block_header, BlockHeader):
+            raise TypeError("block_header must be a BlockHeader")
+        if not isinstance(block_payload, GenotypePayload):
+            raise TypeError("block_payload must be a GenotypePayload")
+        if block_header.block_payload_size != len(block_payload):
+            raise ValueError("block header payload size does not match payload")
         self.block_header = block_header
         self.block_payload = block_payload
 

@@ -29,6 +29,11 @@ class BitstreamWriter:
         self._bit_count += 1
 
     def write_bits(self, bits, nbits):
+        if not isinstance(nbits, int) or isinstance(nbits, bool) or nbits < 0:
+            raise ValueError("nbits must be a non-negative integer")
+        bits = int(bits)
+        if bits < 0:
+            raise ValueError("bits must be non-negative")
         if bits.bit_length() > nbits:
             raise ValueError("bit length of bits exceeds nbits")
         while nbits > 0:
@@ -102,6 +107,8 @@ class BitstreamReader:
             self.read_bits(self._bit_count)
 
     def read_bits(self, n):
+        if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+            raise ValueError("bit count must be a non-negative integer")
         value = 0
         for _ in range(n):
             value = (value << 1) | self._read_bit()
@@ -185,8 +192,12 @@ class BitIO:
             raise RuntimeError("Either bits or nbits is None")
 
     def write(self, bits, nbits):
+        if not isinstance(nbits, int) or isinstance(nbits, bool) or nbits < 0:
+            raise ValueError("nbits must be a non-negative integer")
         if not isinstance(bits, int):
             bits = int(bits)
+        if bits < 0:
+            raise ValueError("bits must be non-negative")
         if bits.bit_length() > nbits:
             raise RuntimeError("Bit length of bits exceeds nbits")
         self.len += nbits
