@@ -14,7 +14,7 @@ def _fits_unsigned(value, length_bytes):
 
 class BlockHeader:
     def __init__(self, content_id, block_payload_size):
-        if not _fits_unsigned(int(content_id), consts.CONTENT_ID_LEN):
+        if not _fits_unsigned(content_id, consts.CONTENT_ID_LEN):
             raise ValueError("content_id is outside the serialized range")
         if not _fits_unsigned(block_payload_size, consts.BLOCK_PAYLOAD_SIZE_LEN):
             raise ValueError("block payload size is outside the serialized range")

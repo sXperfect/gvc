@@ -167,3 +167,45 @@ def test_bit_writers_reject_negative_values_and_widths():
         writer.write_bits(-1, 1)
     with pytest.raises(ValueError, match="nbits"):
         writer.write_bits(0, -1)
+
+
+
+def test_parameter_set_rejects_nonbinary_flags():
+    with pytest.raises(ValueError, match="any_missing_flag"):
+        _parameter_set(any_missing_flag=2)
+    with pytest.raises(ValueError, match="sort_variants_row_flags"):
+        _parameter_set(sort_variants_row_flags=["yes"])
+
+
+def test_payload_rejects_unserializable_component_sizes():
+    from gvc.data_structures import GenotypePayload
+
+    class HugePayload:
+        def __len__(self):
+            return 1 << 32
+
+        def __bytes__(self):
+            raise AssertionError("size validation should happen before serialization")
+
+    parameter_set = _parameter_set()
+    with pytest.raises(ValueError, match="variant payload"):
+        GenotypePayload(
+            parameter_set,
+            variants_payloads=[HugePayload()],
+            variants_row_ids_payloads=[None],
+            variants_col_ids_payloads=[None],
+        )
+
+
+def test_payload_rejects_noninteger_representation_values():
+    from gvc.data_structures import GenotypePayload
+
+    parameter_set = _parameter_set(any_missing_flag=True)
+    with pytest.raises(TypeError, match="missing_rep_val"):
+        GenotypePayload(
+            parameter_set,
+            variants_payloads=[b"x"],
+            variants_row_ids_payloads=[None],
+            variants_col_ids_payloads=[None],
+            missing_rep_val=1.5,
+        )

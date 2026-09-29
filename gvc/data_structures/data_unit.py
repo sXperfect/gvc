@@ -18,7 +18,7 @@ class DataUnitHeader:
     content_len: int
 
     def __post_init__(self):
-        if not _fits_unsigned(int(self.type), consts.DATA_UNIT_TYPE_LEN):
+        if not _fits_unsigned(self.type, consts.DATA_UNIT_TYPE_LEN):
             raise ValueError("data-unit type is outside the serialized range")
         if not isinstance(self.content_len, int) or isinstance(self.content_len, bool):
             raise TypeError("data-unit content length must be an integer")

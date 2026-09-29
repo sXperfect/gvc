@@ -10,6 +10,21 @@ def _payload_bytes(payload):
     return bytes(payload)
 
 
+def _validate_payload_size(payload, size_len, label):
+    try:
+        size = len(payload)
+    except TypeError as exc:
+        raise TypeError("{} must have a byte length".format(label)) from exc
+    if size < 0 or size >= (1 << (8 * size_len)):
+        raise ValueError("{} is outside the serialized size range".format(label))
+    return size
+
+
+def _validate_optional_payload_size(payload, size_len, label):
+    if payload is not None:
+        _validate_payload_size(payload, size_len, label)
+
+
 class GenotypePayload:
     def __init__(
         self,
@@ -51,6 +66,23 @@ class GenotypePayload:
         self.variants_row_ids_payloads = list(variants_row_ids_payloads)
         self.variants_col_ids_payloads = list(variants_col_ids_payloads)
 
+        for i in range(expected):
+            _validate_payload_size(
+                self.variants_payloads[i],
+                consts.VARIANTS_PAYLOAD_SIZES_LEN,
+                "variant payload {}".format(i),
+            )
+            _validate_optional_payload_size(
+                self.variants_row_ids_payloads[i],
+                consts.ROW_IDS_SIZE_LEN,
+                "variant row permutation {}".format(i),
+            )
+            _validate_optional_payload_size(
+                self.variants_col_ids_payloads[i],
+                consts.COL_IDS_SIZE_LEN,
+                "variant column permutation {}".format(i),
+            )
+
         if param_set.binarization_id == consts.BinarizationID.BIT_PLANE:
             if variants_amax_payload is not None:
                 raise ValueError("bit-plane payload must not contain an AMax vector")
@@ -58,6 +90,11 @@ class GenotypePayload:
         elif param_set.binarization_id == consts.BinarizationID.ROW_BIN_SPLIT:
             if variants_amax_payload is None:
                 raise ValueError("row-bin-split payload requires an AMax vector")
+            _validate_payload_size(
+                variants_amax_payload,
+                consts.VARIANTS_AMAX_PAYLOAD_SIZE_LEN,
+                "AMax payload",
+            )
             self.variants_amax_payload = variants_amax_payload
         else:
             raise ValueError("unsupported binarization id")
@@ -70,6 +107,19 @@ class GenotypePayload:
             if param_set.sort_phases_col_flag != (phase_col_ids_payload is not None):
                 raise ValueError("phase column permutation does not match parameter flags")
 
+            _validate_payload_size(
+                phase_payload, consts.PHASE_PAYLOAD_SIZE_LEN, "phase payload"
+            )
+            _validate_optional_payload_size(
+                phase_row_ids_payload,
+                consts.ROW_IDS_SIZE_LEN,
+                "phase row permutation",
+            )
+            _validate_optional_payload_size(
+                phase_col_ids_payload,
+                consts.COL_IDS_SIZE_LEN,
+                "phase column permutation",
+            )
             self.phase_payload = phase_payload
             self.phase_row_ids_payload = phase_row_ids_payload
             self.phase_col_ids_payload = phase_col_ids_payload
@@ -92,8 +142,11 @@ class GenotypePayload:
             ("missing_rep_val", missing_rep_val, consts.MISSING_REP_VAL_LEN),
             ("na_rep_val", na_rep_val, consts.NA_REP_VAL_LEN),
         ):
-            if value is not None and not 0 <= int(value) < (1 << (8 * length)):
-                raise ValueError("{} is outside the serialized range".format(name))
+            if value is not None:
+                if not isinstance(value, int) or isinstance(value, bool):
+                    raise TypeError("{} must be an integer".format(name))
+                if not 0 <= value < (1 << (8 * length)):
+                    raise ValueError("{} is outside the serialized range".format(name))
 
         self.missing_rep_val = missing_rep_val
         self.na_rep_val = na_rep_val

@@ -7,6 +7,12 @@ def _fits_unsigned(value, bits):
     return isinstance(value, int) and not isinstance(value, bool) and 0 <= value < (1 << bits)
 
 
+def _flag(value, name):
+    if value not in (0, 1, False, True):
+        raise ValueError("{} must be 0 or 1".format(name))
+    return bool(value)
+
+
 class ParameterSet:
     def __init__(
         self,
@@ -39,8 +45,8 @@ class ParameterSet:
             raise ValueError("invalid binarization id: {}".format(binarization_id)) from exc
 
         self.parameter_set_id = parameter_set_id
-        self.any_missing_flag = bool(any_missing_flag)
-        self.not_available_flag = bool(not_available_flag)
+        self.any_missing_flag = _flag(any_missing_flag, "any_missing_flag")
+        self.not_available_flag = _flag(not_available_flag, "not_available_flag")
         self.p = p
         self.binarization_id = binarization_id
 
@@ -82,12 +88,19 @@ class ParameterSet:
         ):
             raise ValueError("variant coder id is outside the serialized range")
 
-        self.sort_variants_row_flags = [bool(v) for v in sort_variants_row_flags]
-        self.sort_variants_col_flags = [bool(v) for v in sort_variants_col_flags]
-        self.transpose_variants_mat_flags = [bool(v) for v in transpose_variants_mat_flags]
+        self.sort_variants_row_flags = [
+            _flag(v, "sort_variants_row_flags") for v in sort_variants_row_flags
+        ]
+        self.sort_variants_col_flags = [
+            _flag(v, "sort_variants_col_flags") for v in sort_variants_col_flags
+        ]
+        self.transpose_variants_mat_flags = [
+            _flag(v, "transpose_variants_mat_flags")
+            for v in transpose_variants_mat_flags
+        ]
         self.variants_coder_ids = list(variants_coder_ids)
 
-        self.encode_phase_data = bool(encode_phase_data)
+        self.encode_phase_data = _flag(encode_phase_data, "encode_phase_data")
         self.phase_value = None
         self.sort_phases_row_flag = None
         self.sort_phases_col_flag = None
@@ -109,14 +122,20 @@ class ParameterSet:
             ):
                 raise ValueError("phase coder id is outside the serialized range")
 
-            self.sort_phases_row_flag = bool(sort_phases_row_flag)
-            self.sort_phases_col_flag = bool(sort_phases_col_flag)
-            self.transpose_phase_mat_flag = bool(transpose_phase_mat_flag)
+            self.sort_phases_row_flag = _flag(
+                sort_phases_row_flag, "sort_phases_row_flag"
+            )
+            self.sort_phases_col_flag = _flag(
+                sort_phases_col_flag, "sort_phases_col_flag"
+            )
+            self.transpose_phase_mat_flag = _flag(
+                transpose_phase_mat_flag, "transpose_phase_mat_flag"
+            )
             self.phase_coder_ids = phase_coder_ids
         else:
             if phase_value not in (0, 1, False, True):
                 raise ValueError("phase_value must be 0 or 1 when phase data is not encoded")
-            self.phase_value = bool(phase_value)
+            self.phase_value = _flag(phase_value, "phase_value")
 
     def __eq__(self, other):
         if not isinstance(other, ParameterSet):
