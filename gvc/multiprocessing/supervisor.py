@@ -265,12 +265,15 @@ class EncodeProcessSupervisor:
 
     def cleanup_ipc(self):
         for q in self.queues + [self.error_q, self.status_q]:
+            # A force-terminated child may leave buffered queue data whose
+            # reader no longer exists. Do not let parent shutdown block while
+            # waiting for feeder threads to flush unreachable data.
             try:
-                q.close()
+                q.cancel_join_thread()
             except Exception:
                 pass
             try:
-                q.join_thread()
+                q.close()
             except Exception:
                 pass
 

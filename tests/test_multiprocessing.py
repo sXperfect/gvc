@@ -316,3 +316,16 @@ def test_transaction_commit_rolls_back_file_and_metadata(monkeypatch, tmp_path):
     assert (final_metadata / "marker").read_text() == "OLD-METADATA"
     assert not temp.exists()
     assert not temp_metadata.exists()
+
+
+
+def test_encoder_exposes_supervisor_configuration(tmp_path):
+    encoder = Encoder(
+        str(VCF_FIXTURE),
+        str(tmp_path / "config.gvc"),
+        num_threads=2,
+        multiprocessing_start_method="spawn",
+        multiprocessing_stall_timeout=30,
+    )
+    assert encoder.multiprocessing_start_method == "spawn"
+    assert encoder.multiprocessing_stall_timeout == 30

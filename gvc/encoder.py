@@ -317,6 +317,8 @@ class Encoder(object):
         codec_name:str="jbig",
         preset_mode=1,
         num_threads=0,
+        multiprocessing_start_method=None,
+        multiprocessing_stall_timeout=None,
     ):
 
         self.input_fpath = input_fpath
@@ -341,6 +343,8 @@ class Encoder(object):
         # Additional parameter
         self.preset_mode = preset_mode
         self.num_threads = num_threads
+        self.multiprocessing_start_method = multiprocessing_start_method
+        self.multiprocessing_stall_timeout = multiprocessing_stall_timeout
         
     @property
     def ps_params(self):
@@ -381,6 +385,8 @@ class Encoder(object):
                 self.ps_params,
                 self.tsp_params,
                 self.num_threads,
+                start_method=self.multiprocessing_start_method,
+                stall_timeout=self.multiprocessing_stall_timeout,
             )
 
         else:
