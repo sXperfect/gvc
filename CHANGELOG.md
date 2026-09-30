@@ -34,6 +34,7 @@ All notable changes to this repository will be documented here.
   f9af2127a2ff0b87727924860e33f1905fd507cd.
 - An isolated release benchmark harness for encode/decode throughput, peak RSS,
   storage size, and random-access latency.
+- A controlled-machine benchmark regression comparator and static 1.0 release-readiness preflight.
 - Bounded real-JBIG multiprocessing queue-pressure and random-access release
   regressions.
 - Complete file-level Encoder/Decoder regression coverage for bit-plane,

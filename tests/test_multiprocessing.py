@@ -493,3 +493,62 @@ def test_nonfork_initializer_must_be_picklable(tmp_path, start_method):
         )
 
     assert not output.exists()
+
+
+
+def test_writer_io_failure_is_structured(monkeypatch, tmp_path):
+    from gvc import encoder as encoder_module
+    from gvc.multiprocessing import EncodedBlock, WorkerDone
+    from gvc.multiprocessing.supervisor import child_entry
+
+    queue = Queue()
+    status = _status_queue()
+    stop = DummyEvent()
+    error_q = Queue()
+
+    class FakeParameterSet:
+        parameter_set_id = 0
+
+        def __eq__(self, other):
+            return isinstance(other, FakeParameterSet)
+
+        def to_bytes(self):
+            return b"P"
+
+    class FakeBlock:
+        def __len__(self):
+            return 1
+
+    def failing_store(*args, **kwargs):
+        raise OSError("synthetic disk write failure")
+
+    monkeypatch.setattr(
+        encoder_module.gvc.common,
+        "store_access_unit",
+        failing_store,
+    )
+
+    queue.put(EncodedBlock(0, FakeParameterSet(), FakeBlock()))
+    queue.put(WorkerDone(0))
+
+    with pytest.raises(OSError, match="disk write failure"):
+        child_entry(
+            "writer",
+            None,
+            error_q,
+            stop,
+            worker_writer,
+            (
+                queue,
+                status,
+                stop,
+                str(tmp_path / "writer-failure.gvc"),
+                1,
+            ),
+        )
+
+    error = error_q.get_nowait()
+    assert error.stage == "writer"
+    assert error.error_type == "OSError"
+    assert "disk write failure" in error.message
+    assert stop.is_set()
