@@ -7,4 +7,4 @@ def test_release_readiness_static_preflight_passes_for_development_tree():
 
 def test_release_readiness_rc_mode_rejects_dev_version():
     problems = check_readiness(allow_dev=False)
-    assert any(".dev" in problem for problem in problems)
+    assert any("rcN" in problem for problem in problems)

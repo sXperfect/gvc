@@ -1,0 +1,102 @@
+name: Release validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      historical_max_blocks:
+        description: "Historical blocks per case (0 = full fixture)"
+        required: true
+        default: "0"
+      repetitions:
+        description: "Benchmark repetitions"
+        required: true
+        default: "3"
+      workers:
+        description: "Space-separated benchmark worker counts"
+        required: true
+        default: "0 1 2 4"
+      include_sorting:
+        description: "Exercise all historical row/column sorting combinations"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install JBIG-KIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jbigkit-bin
+
+      - name: Fetch pinned LUH historical fixture
+        run: |
+          mkdir -p tmp/historical
+          curl --fail --location --retry 3 \
+            https://raw.githubusercontent.com/tnt-LUH/gvc/f9af2127a2ff0b87727924860e33f1905fd507cd/tests/test_block01.vcf.gz \
+            --output tmp/historical/test_block01.vcf.gz
+          test "$(git hash-object tmp/historical/test_block01.vcf.gz)" = \
+            "af45a419e46563906ac51fad0be869291316cea9"
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install reviewed Python 3.8 stack
+        run: |
+          python -m pip install --upgrade "pip<25.1"
+          PIP_CONSTRAINT=ci/constraints/py38-latest.txt \
+            python -m pip install --only-binary=:all: --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python -m pip check
+          python scripts/check_py38_latest.py
+
+      - name: Run controlled release validation
+        env:
+          GVC_REQUIRE_JBIGKIT: "1"
+          HISTORICAL_MAX_BLOCKS: ${{ inputs.historical_max_blocks }}
+          INCLUDE_SORTING: ${{ inputs.include_sorting }}
+          REPEATS: ${{ inputs.repetitions }}
+          WORKERS: ${{ inputs.workers }}
+        run: |
+          read -r -a worker_args <<< "$WORKERS"
+          args=(
+            tmp/historical/test_block01.vcf.gz
+            --benchmark-output tmp/release-validation/benchmark.json
+            --evidence-output tmp/release-validation/evidence.json
+            --historical-max-blocks "$HISTORICAL_MAX_BLOCKS"
+            --repetitions "$REPEATS"
+            --workers "${worker_args[@]}"
+          )
+          if [ "$INCLUDE_SORTING" = "true" ]; then
+            args+=(--include-sorting)
+          fi
+          python scripts/run_release_validation.py "${args[@]}"
+
+      - name: Upload release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gvc-release-validation-${{ github.sha }}
+          path: |
+            tmp/release-validation/benchmark.json
+            tmp/release-validation/evidence.json
+          if-no-files-found: error
+          retention-days: 30

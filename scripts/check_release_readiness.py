@@ -16,6 +16,8 @@ REQUIRED_PATHS = (
     "benchmarks/run_release.py",
     "benchmarks/compare_release.py",
     "scripts/verify_historical.py",
+    "scripts/run_release_validation.py",
+    ".github/workflows/release-validation.yml",
     "tests/test_historical_luh_fixture.py",
     "tests/test_jbigkit.py",
     "tests/test_jbigkit_multiprocessing.py",
@@ -44,8 +46,12 @@ def check_readiness(allow_dev=True):
         version = match.group(1)
         if not version.startswith("1.0."):
             problems.append("release/1.0 requires a 1.0.x version")
-        if not allow_dev and ".dev" in version:
-            problems.append("release candidate must not use a .dev version")
+        if not allow_dev:
+            rc_or_final = re.fullmatch(r"1\\.0\\.\\d+(?:rc\\d+)?", version)
+            if rc_or_final is None:
+                problems.append(
+                    "release candidate must use 1.0.<patch>rcN or 1.0.<patch>"
+                )
 
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     if 'requires-python = ">=3.8"' not in pyproject:

@@ -66,3 +66,37 @@ Only after the automated gates and required offline gates are accepted:
 8. after RC acceptance, change to `1.0.1` and tag `v1.0.1`.
 
 Do not start 1.1-only modernization on the release branch.
+
+
+## Controlled release-validation runner
+
+The expensive release gates are intentionally separate from ordinary PR CI.
+Run them locally with:
+
+```bash
+python scripts/run_release_validation.py \
+  tmp/historical/test_block01.vcf.gz \
+  --historical-max-blocks 0 \
+  --include-sorting \
+  --workers 0 1 2 4 \
+  --repetitions 3 \
+  --benchmark-output tmp/release-validation/benchmark.json \
+  --evidence-output tmp/release-validation/evidence.json
+```
+
+If a retained controlled-machine baseline exists, add:
+
+```bash
+  --baseline /path/to/baseline.json \
+  --max-regression-percent <accepted-budget>
+```
+
+The same orchestration is available as the manually dispatched
+`Release validation` GitHub Actions workflow. It is never triggered by push
+or pull request, so the production-scale historical/benchmark workload does
+not consume CI automatically. The workflow uploads the benchmark and evidence
+JSON as a temporary Actions artifact.
+
+The evidence JSON records which controlled gates actually ran. It does not
+replace human review of the benchmark environment, peak-memory results,
+non-Linux validation, or any historical `.gvc` artifact supplied externally.
