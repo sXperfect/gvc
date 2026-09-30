@@ -17,6 +17,7 @@ REQUIRED_PATHS = (
     "benchmarks/compare_release.py",
     "scripts/verify_historical.py",
     "scripts/run_release_validation.py",
+    "scripts/check_release_artifacts.py",
     ".github/workflows/release-validation.yml",
     "tests/test_historical_luh_fixture.py",
     "tests/test_jbigkit.py",

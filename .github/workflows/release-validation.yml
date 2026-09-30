@@ -20,6 +20,11 @@ on:
         required: true
         type: boolean
         default: false
+      rc_mode:
+        description: "Require RC/final version and validate release artifacts"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -74,6 +79,7 @@ jobs:
           GVC_REQUIRE_JBIGKIT: "1"
           HISTORICAL_MAX_BLOCKS: ${{ inputs.historical_max_blocks }}
           INCLUDE_SORTING: ${{ inputs.include_sorting }}
+          RC_MODE: ${{ inputs.rc_mode }}
           REPEATS: ${{ inputs.repetitions }}
           WORKERS: ${{ inputs.workers }}
         run: |
@@ -89,6 +95,9 @@ jobs:
           if [ "$INCLUDE_SORTING" = "true" ]; then
             args+=(--include-sorting)
           fi
+          if [ "$RC_MODE" = "true" ]; then
+            args+=(--rc)
+          fi
           python scripts/run_release_validation.py "${args[@]}"
 
       - name: Upload release evidence
@@ -98,5 +107,7 @@ jobs:
           path: |
             tmp/release-validation/benchmark.json
             tmp/release-validation/evidence.json
+            tmp/release-validation/artifacts.json
+            tmp/release-validation/dist/*
           if-no-files-found: error
           retention-days: 30

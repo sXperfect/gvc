@@ -100,3 +100,23 @@ JSON as a temporary Actions artifact.
 The evidence JSON records which controlled gates actually ran. It does not
 replace human review of the benchmark environment, peak-memory results,
 non-Linux validation, or any historical `.gvc` artifact supplied externally.
+
+
+## RC artifact promotion gate
+
+When the package version is changed from a development version to an RC such as
+`1.0.1rc1`, run release validation with `--rc` (or enable `rc_mode` in the
+manual workflow). The RC gate additionally:
+
+- rejects development-version metadata;
+- builds exactly one wheel and one source distribution;
+- verifies wheel Name, Version, and `Requires-Python >=3.8`;
+- verifies the wheel contains all three compiled native extension modules;
+- verifies the source distribution contains the required Cython build sources,
+  license/notice, README, and build metadata;
+- records artifact byte sizes and SHA-256 hashes in
+  `tmp/release-validation/artifacts.json`.
+
+The tag must not be created until the RC artifact evidence, historical
+compatibility evidence, and controlled benchmark evidence all correspond to the
+same commit.
