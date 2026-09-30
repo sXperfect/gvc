@@ -47,7 +47,7 @@ def check_readiness(allow_dev=True):
         if not version.startswith("1.0."):
             problems.append("release/1.0 requires a 1.0.x version")
         if not allow_dev:
-            rc_or_final = re.fullmatch(r"1\\.0\\.\\d+(?:rc\\d+)?", version)
+            rc_or_final = re.fullmatch(r"1\.0\.\d+(?:rc\d+)?", version)
             if rc_or_final is None:
                 problems.append(
                     "release candidate must use 1.0.<patch>rcN or 1.0.<patch>"
