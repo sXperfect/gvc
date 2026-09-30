@@ -18,6 +18,8 @@ REQUIRED_PATHS = (
     "scripts/verify_historical.py",
     "scripts/run_release_validation.py",
     "scripts/check_release_artifacts.py",
+    "scripts/check_release_tag.py",
+    "docs/audits/release-1.0.1-checklist.md",
     ".github/workflows/release-validation.yml",
     "tests/test_historical_luh_fixture.py",
     "tests/test_jbigkit.py",
