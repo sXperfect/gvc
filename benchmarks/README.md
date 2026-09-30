@@ -68,3 +68,28 @@ material regressions in throughput, memory, or storage ratio.
 Production release validation should additionally use the full LUH historical
 fixture, realistic worker counts, sorting enabled where relevant, and the real
 JBIG-KIT executables.
+
+
+## Comparing controlled-machine baselines
+
+After capturing two reports on the same machine/toolchain, compare them with:
+
+```bash
+python benchmarks/compare_release.py \
+  benchmarks/results/v1.0.1rc1-baseline.json \
+  benchmarks/results/candidate.json
+```
+
+This is report-only by default. For a controlled release gate, an explicit
+regression budget can be supplied:
+
+```bash
+python benchmarks/compare_release.py \
+  baseline.json candidate.json \
+  --require-same-configurations \
+  --max-regression-percent 10
+```
+
+Throughput metrics treat lower values as regressions; latency, RSS, and encoded
+size treat higher values as regressions. Do not use these thresholds on hosted
+CI runners unless the environment is demonstrably stable.
