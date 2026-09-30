@@ -57,3 +57,26 @@ were reviewed.
 After RC validation and any necessary fixes, repeat the same process with
 `1.0.1` and tag `v1.0.1`. Do not move the Python floor or v1 file-format
 contract in a 1.0.x patch release.
+
+
+## Evidence provenance
+
+The release-validation evidence is part of the release record, not a disposable
+log. For RC/final validation, verify that `evidence.json` records:
+
+- the exact Git commit;
+- a clean worktree;
+- the package version;
+- Python/platform/CPU identity;
+- historical fixture byte size, SHA-256, and Git blob identity;
+- the exact validation configuration;
+- benchmark report SHA-256;
+- release-artifact evidence SHA-256 and the wheel/sdist SHA-256 values;
+- trusted baseline SHA-256 when a benchmark baseline is used.
+
+The manual workflow accepts a baseline URL only together with an explicit
+SHA-256. This prevents a mutable URL from silently changing the release
+comparison reference.
+
+Before tagging, the reviewed commit, CI head, evidence commit, artifact hashes,
+and proposed tag target must all refer to the same release candidate.

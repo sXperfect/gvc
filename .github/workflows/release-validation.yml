@@ -25,6 +25,18 @@ on:
         required: true
         type: boolean
         default: false
+      baseline_url:
+        description: "Optional trusted benchmark baseline URL"
+        required: false
+        default: ""
+      baseline_sha256:
+        description: "Required SHA-256 when baseline_url is supplied"
+        required: false
+        default: ""
+      max_regression_percent:
+        description: "Optional accepted benchmark regression budget"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -74,6 +86,21 @@ jobs:
           python -m pip check
           python scripts/check_py38_latest.py
 
+      - name: Fetch trusted benchmark baseline
+        if: ${{ inputs.baseline_url != '' }}
+        env:
+          BASELINE_URL: ${{ inputs.baseline_url }}
+          BASELINE_SHA256: ${{ inputs.baseline_sha256 }}
+        run: |
+          test -n "$BASELINE_SHA256" || {
+            echo "baseline_sha256 is required with baseline_url" >&2
+            exit 2
+          }
+          mkdir -p tmp/release-validation
+          curl --fail --location --retry 3 "$BASELINE_URL" \
+            --output tmp/release-validation/baseline.json
+          echo "$BASELINE_SHA256  tmp/release-validation/baseline.json" | sha256sum -c -
+
       - name: Run controlled release validation
         env:
           GVC_REQUIRE_JBIGKIT: "1"
@@ -82,6 +109,8 @@ jobs:
           RC_MODE: ${{ inputs.rc_mode }}
           REPEATS: ${{ inputs.repetitions }}
           WORKERS: ${{ inputs.workers }}
+          BASELINE_URL: ${{ inputs.baseline_url }}
+          MAX_REGRESSION_PERCENT: ${{ inputs.max_regression_percent }}
         run: |
           read -r -a worker_args <<< "$WORKERS"
           args=(
@@ -97,6 +126,12 @@ jobs:
           fi
           if [ "$RC_MODE" = "true" ]; then
             args+=(--rc)
+          fi
+          if [ -n "$BASELINE_URL" ]; then
+            args+=(--baseline tmp/release-validation/baseline.json)
+          fi
+          if [ -n "$MAX_REGRESSION_PERCENT" ]; then
+            args+=(--max-regression-percent "$MAX_REGRESSION_PERCENT")
           fi
           python scripts/run_release_validation.py "${args[@]}"
 

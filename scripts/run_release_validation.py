@@ -2,8 +2,10 @@
 """Orchestrate controlled GVC 1.0 release-candidate validation."""
 
 import argparse
+import hashlib
 import json
 import os
+import platform
 import subprocess
 import sys
 import time
@@ -42,6 +44,47 @@ def _artifact(path):
     if not value.is_file():
         raise FileNotFoundError("required file does not exist: {}".format(value))
     return value.resolve()
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _git_output(*args):
+    completed = subprocess.run(
+        ["git"] + list(args),
+        cwd=str(ROOT),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    return completed.stdout.strip()
+
+
+def _git_commit():
+    return _git_output("rev-parse", "HEAD")
+
+
+def _git_dirty():
+    return bool(_git_output("status", "--porcelain"))
+
+
+def _git_blob(path):
+    return _git_output("hash-object", str(path))
+
+
+def _record_file(path):
+    value = Path(path).resolve()
+    return {
+        "path": str(value),
+        "bytes": value.stat().st_size,
+        "sha256": _sha256(value),
+    }
 
 
 def main(argv=None):
@@ -123,13 +166,35 @@ def main(argv=None):
         parser.error("--max-regression-percent requires --baseline")
 
     evidence = {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_unix": time.time(),
-        "fixture": str(fixture),
-        "fixture_bytes": fixture.stat().st_size,
+        "commit": _git_commit(),
+        "git_dirty": _git_dirty(),
+        "package_version": _package_version(),
+        "host": {
+            "platform": platform.platform(),
+            "python": platform.python_version(),
+            "executable": sys.executable,
+            "cpu_count": os.cpu_count(),
+        },
+        "fixture": dict(
+            _record_file(fixture),
+            git_blob=_git_blob(fixture),
+        ),
         "rc_mode": bool(args.rc),
+        "configuration": {
+            "historical_max_blocks": args.historical_max_blocks,
+            "include_sorting": bool(args.include_sorting),
+            "workers": args.workers,
+            "repetitions": args.repetitions,
+            "block_size": args.block_size,
+            "start_method": args.start_method,
+            "max_regression_percent": args.max_regression_percent,
+        },
         "steps": [],
     }
+    if args.rc and evidence["git_dirty"]:
+        raise RuntimeError("RC validation requires a clean git worktree")
 
     readiness = [sys.executable, "scripts/check_release_readiness.py"]
     if args.rc:
@@ -172,12 +237,16 @@ def main(argv=None):
             "--output",
             str(artifact_evidence),
         ])
+        artifact_data = json.loads(
+            artifact_evidence.read_text(encoding="utf-8")
+        )
         evidence["steps"].append(
             {
                 "name": "release_artifacts",
                 "status": "pass",
                 "version": version,
-                "evidence": str(artifact_evidence),
+                "evidence": _record_file(artifact_evidence),
+                "artifacts": artifact_data["artifacts"],
             }
         )
 
@@ -225,7 +294,7 @@ def main(argv=None):
         {
             "name": "release_benchmark",
             "status": "pass",
-            "report": str(benchmark_output),
+            "report": _record_file(benchmark_output),
             "workers": args.workers,
             "repetitions": args.repetitions,
             "start_method": args.start_method,
@@ -250,12 +319,13 @@ def main(argv=None):
             {
                 "name": "benchmark_comparison",
                 "status": "pass",
-                "baseline": str(baseline),
+                "baseline": _record_file(baseline),
                 "max_regression_percent": args.max_regression_percent,
             }
         )
 
     evidence["status"] = "pass"
+    evidence["completed_unix"] = time.time()
     if args.evidence_output:
         output = Path(args.evidence_output).resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
