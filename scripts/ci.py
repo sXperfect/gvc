@@ -242,6 +242,10 @@ def dependency_gate():
     return 0
 
 
+def release_readiness_gate():
+    return run([sys.executable, "scripts/check_release_readiness.py"])
+
+
 GATES = {
     "metadata": metadata_gate,
     "syntax": syntax_gate,
@@ -252,11 +256,12 @@ GATES = {
     "cli": cli_gate,
     "deps": dependency_gate,
     "dependencies": dependency_gate,
+    "release": release_readiness_gate,
 }
 
 
 def all_gates():
-    for name in ("metadata", "syntax", "native", "test", "cli", "packaging", "deps"):
+    for name in ("metadata", "syntax", "native", "test", "cli", "packaging", "release", "deps"):
         print("\n== {} ==".format(name), flush=True)
         status = GATES[name]()
         if status:
