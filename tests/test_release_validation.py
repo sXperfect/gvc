@@ -78,8 +78,25 @@ def test_release_validation_writes_machine_readable_evidence(monkeypatch, tmp_pa
 
     assert status == 0
     payload = json.loads(evidence.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["status"] == "pass"
+    assert payload["commit"] == run_release_validation._git_commit()
+    assert isinstance(payload["git_dirty"], bool)
+    assert payload["package_version"]
+    assert payload["host"]["python"]
+    assert payload["host"]["executable"]
+    assert payload["fixture"]["bytes"] == len(b"fixture")
+    assert len(payload["fixture"]["sha256"]) == 64
+    assert payload["fixture"]["git_blob"]
+    assert payload["configuration"] == {
+        "historical_max_blocks": 1,
+        "include_sorting": False,
+        "workers": [0, 2],
+        "repetitions": 1,
+        "block_size": 2048,
+        "start_method": None,
+        "max_regression_percent": None,
+    }
     assert [step["name"] for step in payload["steps"]] == [
         "static_release_readiness",
         "historical_fixture",
