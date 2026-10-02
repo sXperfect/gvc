@@ -2,11 +2,19 @@
 """Verify that a proposed release tag matches the package version."""
 
 import argparse
-import re
+import importlib.util
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_version_policy():
+    path = ROOT / "scripts" / "version_policy.py"
+    spec = importlib.util.spec_from_file_location("gvc_version_policy", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def package_version():
@@ -26,13 +34,14 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     version = package_version()
-    expected = "v" + version
-    if re.fullmatch(r"1\.0\.\d+(?:rc\d+)?", version) is None:
+    policy = _load_version_policy()
+    if not policy.is_taggable(version):
         parser.error(
-            "package version must be a 1.0.x RC or final release, got {}".format(
+            "package version must be a taggable 1.0.x RC or final release, got {}".format(
                 version
             )
         )
+    expected = policy.expected_tag(version)
     if args.tag != expected:
         parser.error(
             "tag {} does not match package version {}; expected {}".format(
