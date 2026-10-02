@@ -969,3 +969,41 @@ def test_cleanup_ipc_closes_all_queues_even_when_one_cleanup_fails(tmp_path):
     for q in (q1, q2, error_q, status_q):
         assert q.cancel_calls == 1
         assert q.close_calls == 1
+
+
+def test_abrupt_child_exit_terminates_surviving_sibling(tmp_path):
+    import multiprocessing as local_mp
+
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    context = local_mp.get_context()
+    failed = context.Process(name="GVC-Failed", target=_abrupt_exit)
+    failed._gvc_stage = "encoder"
+    failed._gvc_worker_id = 0
+
+    sibling = context.Process(name="GVC-Sibling", target=_sleep_forever)
+    sibling._gvc_stage = "encoder"
+    sibling._gvc_worker_id = 1
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[failed, sibling],
+        error_q=context.Queue(),
+        status_q=context.Queue(),
+        stop_event=context.Event(),
+        queues=[],
+        temp_output=tmp_path / "sibling.tmp",
+        final_output=tmp_path / "sibling.gvc",
+        poll_interval=0.02,
+        graceful_timeout=0.05,
+    )
+
+    with pytest.raises(MultiprocessingEncodeError) as exc_info:
+        supervisor.run()
+
+    assert any(
+        error.worker_id == 0 and error.error_type == "ProcessExit"
+        for error in exc_info.value.errors
+    )
+    assert not failed.is_alive()
+    assert not sibling.is_alive()
+    assert not (tmp_path / "sibling.gvc").exists()
