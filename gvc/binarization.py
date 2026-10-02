@@ -669,22 +669,28 @@ def binarize_allele_matrix(
     return bin_matrices, additional_info
 
 def gt_val_to_gt_char(v):
+    try:
+        value = int(v)
+    except (TypeError, ValueError) as exc:
+        raise TypeError("genotype value must be an integer") from exc
 
-    # assert (v >= 48 and v <= 57) or (v == -1)
-    assert v >= -1
-
-    if v == -1:
-        # return chr(46) # '.'
-        return 46
-    else:
-        return v+48
+    if value == -1:
+        return 46  # '.'
+    if not 0 <= value <= 9:
+        raise ValueError(
+            "single-character genotype conversion requires a value in -1..9"
+        )
+    return value + 48
 
 def recon_gt_mat_using_phasing_mat(
     allele_mat,
     phasing_mat,
     p
 ):
-    pass
+    raise NotImplementedError(
+        "recon_gt_mat_using_phasing_mat is not implemented; "
+        "use the maintained debinarize reconstruction path"
+    )
 
 def reconstruct_genotype_matrix_using_phase_value(
     allele_mat, 

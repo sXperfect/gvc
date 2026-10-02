@@ -242,3 +242,19 @@ def test_row_bin_inverse_rejects_bit_length_above_uint8_width():
             [matrix],
             np.array([9], dtype=np.uint16),
         )
+
+
+
+@pytest.mark.parametrize("value", [-2, 10, 127])
+def test_gt_val_to_gt_char_rejects_out_of_single_digit_range(value):
+    with pytest.raises(ValueError, match="single-character genotype"):
+        binarization.gt_val_to_gt_char(value)
+
+
+def test_unimplemented_legacy_phasing_reconstruction_fails_explicitly():
+    with pytest.raises(NotImplementedError, match="not implemented"):
+        binarization.recon_gt_mat_using_phasing_mat(
+            np.zeros((1, 2), dtype=np.int8),
+            np.zeros((1, 1), dtype=bool),
+            2,
+        )

@@ -115,10 +115,10 @@ def decode_encoded_variants(
     if param_set.binarization_id == consts.BinarizationID.BIT_PLANE:
         additional_info = param_set.num_bin_mat
     elif param_set.binarization_id in [consts.BinarizationID.ROW_BIN_SPLIT]:
-        try:
-            variants_amax_payload = encoded_variants.variants_amax_payload.read()
-        except AttributeError:
-            variants_amax_payload = encoded_variants.variants_amax_payload
+        variants_amax_payload = encoded_variants.variants_amax_payload
+        payload_reader = getattr(variants_amax_payload, "read", None)
+        if payload_reader is not None:
+            variants_amax_payload = payload_reader()
             
         additional_info = ds.VectorAMax.from_bytes(variants_amax_payload).vector
             

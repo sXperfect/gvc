@@ -88,3 +88,30 @@ def test_cache_access_unit_rejects_inconsistent_sample_count(monkeypatch):
 
     with pytest.raises(ValueError, match="tensor sample count is inconsistent"):
         instance._cache_access_unit()
+
+
+
+def test_amax_internal_attribute_error_is_not_swallowed(monkeypatch):
+    class BrokenAMax:
+        def __len__(self):
+            return 1
+
+        def read(self):
+            raise AttributeError("synthetic internal attribute failure")
+
+    param_set = _row_split_parameter_set()
+    payload = GenotypePayload(
+        param_set,
+        variants_payloads=[b"x"],
+        variants_row_ids_payloads=[None],
+        variants_col_ids_payloads=[None],
+        variants_amax_payload=BrokenAMax(),
+    )
+    monkeypatch.setattr(
+        decoder.codec,
+        "decode",
+        lambda *args, **kwargs: np.zeros((1, 2), dtype=bool),
+    )
+
+    with pytest.raises(AttributeError, match="synthetic internal attribute failure"):
+        decoder.decode_encoded_variants(param_set, payload)

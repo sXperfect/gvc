@@ -27,6 +27,11 @@ def _codec_entry(coder_id):
             "unsupported codec id: {}".format(int(coder_id))
         ) from exc
 
+def _read_payload(payload):
+    reader = getattr(payload, "read", None)
+    return reader() if reader is not None else payload
+
+
 def decode_permutation(payload, num_entries):
     permutation = RowColIds.from_bytes(payload, num_entries).ids
     return permutation
@@ -151,30 +156,21 @@ def decode(
     coder_id:int,
     unsort=True
 ):
-    try:
-        bin_mat_payload = bin_mat_payload.read()
-    except AttributeError:
-        pass
+    bin_mat_payload = _read_payload(bin_mat_payload)
 
     decode_f = _codec_entry(coder_id)["decoder"]
     bin_mat = decode_f(bin_mat_payload)
     nrows, ncols = bin_mat.shape
     
     if row_ids_payload is not None:
-        try:
-            row_ids_payload = row_ids_payload.read()
-        except AttributeError:
-            pass
+        row_ids_payload = _read_payload(row_ids_payload)
         
         row_ids = decode_permutation(row_ids_payload, nrows)
     else:
         row_ids = None
 
     if col_ids_payload is not None:
-        try:
-            col_ids_payload = col_ids_payload.read()
-        except AttributeError:
-            pass
+        col_ids_payload = _read_payload(col_ids_payload)
 
         col_ids = decode_permutation(col_ids_payload, ncols)
     else:
