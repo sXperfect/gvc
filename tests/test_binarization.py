@@ -223,3 +223,22 @@ def test_split_genotype_matrix_handles_mixed_ploidy_by_padding():
         phase_matrix,
         np.array([[0, 0]], dtype=bool),
     )
+
+
+
+def test_row_bin_inverse_rejects_multiple_matrices():
+    matrix = np.zeros((1, 1), dtype=bool)
+    with pytest.raises(ValueError, match="exactly one binary matrix"):
+        binarization.debin_row_bin_split(
+            [matrix, matrix],
+            np.array([1], dtype=np.uint16),
+        )
+
+
+def test_row_bin_inverse_rejects_bit_length_above_uint8_width():
+    matrix = np.zeros((9, 1), dtype=bool)
+    with pytest.raises(ValueError, match="within 1..8"):
+        binarization.debin_row_bin_split(
+            [matrix],
+            np.array([9], dtype=np.uint16),
+        )
