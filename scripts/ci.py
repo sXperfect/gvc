@@ -15,7 +15,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-from scripts import check_release_artifacts
 
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
