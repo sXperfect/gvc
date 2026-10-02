@@ -40,3 +40,20 @@ def test_amax_rejects_impossible_entry_count_before_allocation():
         ValueError, "entry count exceeds available data"
     ):
         VectorAMax.from_bytes(payload)
+
+
+
+def test_amax_rejects_value_above_uint8_bit_length_limit():
+    with np.testing.assert_raises_regex(
+        ValueError, "must not exceed 8"
+    ):
+        VectorAMax(np.array([9], dtype=np.uint16))
+
+
+def test_amax_rejects_serialized_entry_width_above_format_limit():
+    payload = (1).to_bytes(4, "big") + b"\x04" + b"\x00"
+
+    with np.testing.assert_raises_regex(
+        ValueError, "entry width exceeds"
+    ):
+        VectorAMax.from_bytes(payload)
