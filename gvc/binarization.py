@@ -573,29 +573,22 @@ def bin_row_bin_split(matrix, **kwargs):
     return bin_mat, bitlen_vect
 
 def debin_row_bin_split(bin_matrices, bitlen_vect, **kwargs):
+    if isinstance(bin_matrices, list):
+        if len(bin_matrices) != 1:
+            raise ValueError("row-bin-split requires exactly one binary matrix")
+        bin_mat = bin_matrices[0]
+    elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 1:
+        if len(bin_matrices) != 1:
+            raise ValueError("row-bin-split requires exactly one binary matrix")
+        bin_mat = bin_matrices[0]
+    else:
+        raise ValueError(
+            "invalid row-bin-split matrix container: {}".format(
+                type(bin_matrices)
+            )
+        )
 
-    try:
-        if isinstance(bin_matrices, list):
-            bin_mat = bin_matrices[0]
-        elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 1:
-            bin_mat = bin_matrices[0]
-        # elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 3:
-        #     bin_mat = bin_matrices[0, :, :]
-        # elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 2:
-        #     bin_mat = bin_matrices
-        else:
-            raise TypeError
-        
-    except TypeError:
-        error_msg = "Invalid data type:{}".format(type(bin_matrices))
-        log.info(error_msg)
-        raise ValueError(error_msg)
-
-    # TODO: fix cython function debin_rc_bin_split
-    # matrix = cdebinarize.debin_rc_bin_split(bin_mat, bitlen_vect.astype(np.uint8))
-    matrix = debinarize.debin_rc_bin_split(bin_mat, bitlen_vect.astype(np.uint8))
-
-    return matrix
+    return debinarize.debin_rc_bin_split(bin_mat, bitlen_vect)
 
 BINARIZATIONS = {
     BinarizationID.BIT_PLANE: {
