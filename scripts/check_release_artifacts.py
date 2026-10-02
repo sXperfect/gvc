@@ -156,7 +156,7 @@ def main(argv=None):
     parser.add_argument("--output")
     args = parser.parse_args(argv)
 
-    if re.fullmatch(r"1\.0\.\d+(?:rc\d+)?", args.version) is None:
+    if re.fullmatch(r"1\.0\.\d+(?:rc[1-9]\d*)?", args.version) is None:
         parser.error("--version must be a 1.0.x RC or final version")
 
     wheel = Path(args.wheel).resolve()
