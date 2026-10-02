@@ -287,3 +287,12 @@ def test_native_row_split_rejects_bit_length_above_uint8_width():
         cdebinarize.debin_rc_bin_split(
             encoded, np.array([9], dtype=np.uint8)
         )
+
+
+
+def test_cquery_rejects_uint32_expansion_overflow():
+    query = np.array([np.iinfo(np.uint32).max], dtype=np.uint32)
+    with np.testing.assert_raises_regex(
+        ValueError, "exceeds uint32 range"
+    ):
+        cquery.cget_col_ids(query, 2)
