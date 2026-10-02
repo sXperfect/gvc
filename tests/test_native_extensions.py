@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from gvc import cdebinarize, cquery, debinarize
 from gvc.binarization import bin_row_bin_split
