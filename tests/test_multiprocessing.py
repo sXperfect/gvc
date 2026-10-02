@@ -849,3 +849,44 @@ def test_real_parent_sigterm_cleans_child_processes_and_temp_artifacts(tmp_path)
         if process.poll() is None:
             process.kill()
             process.wait(timeout=5)
+
+
+def test_supervisor_rejects_missing_completion_messages(tmp_path):
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[],
+        error_q=Queue(),
+        status_q=Queue(),
+        stop_event=DummyEvent(),
+        queues=[],
+        temp_output=tmp_path / "missing-completion.tmp",
+        final_output=tmp_path / "missing-completion.gvc",
+        poll_interval=0.01,
+    )
+
+    with pytest.raises(MultiprocessingEncodeError, match="reader completion count"):
+        supervisor.wait()
+
+
+def test_supervisor_rejects_reader_writer_block_count_mismatch(tmp_path):
+    from gvc.multiprocessing import ReaderDone, WriterDone
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    status = Queue()
+    status.put(ReaderDone(5))
+    status.put(WriterDone(4))
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[],
+        error_q=Queue(),
+        status_q=status,
+        stop_event=DummyEvent(),
+        queues=[],
+        temp_output=tmp_path / "mismatch.tmp",
+        final_output=tmp_path / "mismatch.gvc",
+        poll_interval=0.01,
+    )
+
+    with pytest.raises(MultiprocessingEncodeError, match="reader produced 5, writer committed 4"):
+        supervisor.wait()
