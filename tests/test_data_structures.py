@@ -29,3 +29,14 @@ def test_empty_row_col_ids_roundtrip():
     payload = RowColIds(permutation).to_bitio().to_bytes(align=True)
     restored = RowColIds.from_bytes(payload, 0).ids
     np.testing.assert_array_equal(restored, permutation)
+
+
+
+def test_amax_rejects_impossible_entry_count_before_allocation():
+    # Header claims 2^32-1 entries but provides no entry flags.
+    payload = (2**32 - 1).to_bytes(4, "big") + b"\x01"
+
+    with np.testing.assert_raises_regex(
+        ValueError, "entry count exceeds available data"
+    ):
+        VectorAMax.from_bytes(payload)
