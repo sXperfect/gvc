@@ -239,3 +239,33 @@ def test_rc_baseline_requires_explicit_regression_budget(tmp_path):
             ]
         )
     assert exc_info.value.code == 2
+
+
+def test_rc_dirty_worktree_persists_failure_evidence(monkeypatch, tmp_path):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"fixture")
+    evidence = tmp_path / "evidence.json"
+
+    monkeypatch.setattr(run_release_validation, "_git_dirty", lambda: True)
+    monkeypatch.setattr(run_release_validation, "_package_version", lambda: "1.0.1rc1")
+
+    with pytest.raises(RuntimeError, match="clean git worktree"):
+        run_release_validation.main(
+            [
+                str(fixture),
+                "--benchmark-output",
+                str(tmp_path / "benchmark.json"),
+                "--evidence-output",
+                str(evidence),
+                "--rc",
+                "--historical-max-blocks",
+                "0",
+                "--include-sorting",
+            ]
+        )
+
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    assert payload["status"] == "fail"
+    assert payload["steps"][-1]["name"] == "clean_worktree"
+    assert payload["steps"][-1]["status"] == "fail"
+    assert "clean git worktree" in payload["steps"][-1]["error"]
