@@ -3,6 +3,8 @@
 import os
 import queue
 import shutil
+import signal
+import threading
 import time
 import traceback
 import uuid
@@ -364,10 +366,45 @@ class EncodeProcessSupervisor:
             if metadata_backup.exists():
                 shutil.rmtree(str(metadata_backup))
 
+    def _install_parent_signal_handlers(self):
+        if threading.current_thread() is not threading.main_thread():
+            return {}
+
+        previous = {}
+        for signum in (getattr(signal, "SIGTERM", None),):
+            if signum is None:
+                continue
+            previous[signum] = signal.getsignal(signum)
+
+            def _handler(received, frame, self=self):
+                self.stop_event.set()
+                raise MultiprocessingEncodeError(
+                    [
+                        WorkerError(
+                            stage="supervisor",
+                            worker_id=None,
+                            block_id=None,
+                            error_type="SignalTermination",
+                            message="parent received signal {}".format(received),
+                            traceback="",
+                        )
+                    ]
+                )
+
+            signal.signal(signum, _handler)
+        return previous
+
+    @staticmethod
+    def _restore_parent_signal_handlers(previous):
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+
     def run(self):
         self.cleanup_temp()
+        previous_handlers = {}
         try:
             self.start()
+            previous_handlers = self._install_parent_signal_handlers()
             count = self.wait()
             self.join()
             self.commit()
@@ -377,4 +414,5 @@ class EncodeProcessSupervisor:
             self.cleanup_temp()
             raise
         finally:
+            self._restore_parent_signal_handlers(previous_handlers)
             self.cleanup_ipc()
