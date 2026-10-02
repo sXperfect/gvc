@@ -375,3 +375,49 @@ def test_rc_validation_rejects_wrong_historical_fixture_identity(
     assert payload["status"] == "fail"
     assert payload["steps"][-1]["name"] == "historical_fixture_identity"
     assert payload["steps"][-1]["actual_git_blob"] == "0" * 40
+
+
+
+def test_release_artifact_smoke_helper_uses_ci_installer(
+    monkeypatch,
+    tmp_path,
+):
+    from scripts import ci
+
+    artifact = tmp_path / "artifact.whl"
+    artifact.write_bytes(b"x")
+    calls = []
+
+    def fake_install(path, name):
+        calls.append((Path(path), name))
+        return 0
+
+    monkeypatch.setattr(ci, "install_and_smoke_artifact", fake_install)
+
+    run_release_validation._install_and_smoke_artifact(
+        artifact,
+        "release-wheel",
+    )
+
+    assert calls == [(artifact.resolve(), "release-wheel")]
+
+
+def test_release_artifact_smoke_helper_rejects_failed_install(
+    monkeypatch,
+    tmp_path,
+):
+    from scripts import ci
+
+    artifact = tmp_path / "artifact.tar.gz"
+    artifact.write_bytes(b"x")
+    monkeypatch.setattr(
+        ci,
+        "install_and_smoke_artifact",
+        lambda path, name: 7,
+    )
+
+    with pytest.raises(RuntimeError, match="status 7"):
+        run_release_validation._install_and_smoke_artifact(
+            artifact,
+            "release-sdist",
+        )
