@@ -1006,3 +1006,63 @@ def test_abrupt_child_exit_terminates_surviving_sibling(tmp_path):
     assert not failed.is_alive()
     assert not sibling.is_alive()
     assert not (tmp_path / "sibling.gvc").exists()
+
+
+
+def test_partial_process_start_failure_cleans_started_children_and_temp(tmp_path):
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    class StartedProcess:
+        def __init__(self):
+            self.pid = None
+            self.alive = False
+            self.terminate_calls = 0
+            self.kill_calls = 0
+
+        def start(self):
+            self.pid = 111
+            self.alive = True
+
+        def join(self, timeout=None):
+            pass
+
+        def is_alive(self):
+            return self.alive
+
+        def terminate(self):
+            self.terminate_calls += 1
+            self.alive = False
+
+        def kill(self):
+            self.kill_calls += 1
+            self.alive = False
+
+    class FailingProcess:
+        pid = None
+
+        def start(self):
+            raise RuntimeError("synthetic start failure")
+
+    started = StartedProcess()
+    failing = FailingProcess()
+    temp = tmp_path / "partial-start.tmp"
+    temp.write_bytes(b"partial")
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[started, failing],
+        error_q=Queue(),
+        status_q=Queue(),
+        stop_event=DummyEvent(),
+        queues=[],
+        temp_output=temp,
+        final_output=tmp_path / "partial-start.gvc",
+        graceful_timeout=0,
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic start failure"):
+        supervisor.run()
+
+    assert started.terminate_calls == 1
+    assert started.is_alive() is False
+    assert not temp.exists()
+    assert not (tmp_path / "partial-start.gvc").exists()
