@@ -1,3 +1,4 @@
+from pathlib import Path
 from os.path import join
 
 import numpy as np
@@ -14,6 +15,8 @@ class Index:
 
         if self.root_idx.ndim != 2 or self.root_idx.shape[1] != 2:
             raise ValueError("root index must have shape (n_blocks, 2)")
+        if not np.issubdtype(self.root_idx.dtype, np.integer):
+            raise TypeError("root index positions must use an integer dtype")
         if np.any(self.root_idx[:, 0] > self.root_idx[:, 1]):
             raise ValueError("root index contains a block with start > end")
         if self.root_idx.shape[0] > 1 and np.any(
@@ -24,6 +27,18 @@ class Index:
             raise ValueError("sample index must be one-dimensional")
         if len(set(self.samples.tolist())) != len(self.samples):
             raise ValueError("sample index contains duplicate sample IDs")
+        encoded_sample_count = getattr(decoder_context, "ncols", None)
+        if (
+            encoded_sample_count is not None
+            and len(self.samples) != encoded_sample_count
+        ):
+            raise ValueError(
+                "metadata sample count does not match encoded data: "
+                "expected {}, got {}".format(
+                    encoded_sample_count,
+                    len(self.samples),
+                )
+            )
 
         block_ptrs = []
         param_set_ids = []
@@ -57,10 +72,14 @@ class Index:
 
     @classmethod
     def from_gvc_fpath(cls, input_fpath, decoder_context):
-        try:
-            return cls(input_fpath + ".metadata", decoder_context)
-        except FileNotFoundError:
+        index_path = Path(input_fpath + ".metadata")
+        if not index_path.exists():
             return None
+        if not index_path.is_dir():
+            raise NotADirectoryError(
+                "metadata sidecar is not a directory: {}".format(index_path)
+            )
+        return cls(str(index_path), decoder_context)
 
     @staticmethod
     def _validate_interval(start_pos, end_pos):
@@ -97,10 +116,22 @@ class Index:
             )
             if curr_block_idx.ndim != 1:
                 raise ValueError("block position index must be one-dimensional")
+            if not np.issubdtype(curr_block_idx.dtype, np.integer):
+                raise TypeError("block position index must use an integer dtype")
             if curr_block_idx.size > 1 and np.any(
                 curr_block_idx[1:] < curr_block_idx[:-1]
             ):
                 raise ValueError("block position index must be sorted")
+            if curr_block_idx.size:
+                expected_start = int(self.root_idx[block_id, 0])
+                expected_end = int(self.root_idx[block_id, 1])
+                if (
+                    int(curr_block_idx[0]) != expected_start
+                    or int(curr_block_idx[-1]) != expected_end
+                ):
+                    raise ValueError(
+                        "block position index does not match root index bounds"
+                    )
             self.block_idx[block_id] = curr_block_idx
 
         start_row = np.searchsorted(curr_block_idx, start_pos, side="left")

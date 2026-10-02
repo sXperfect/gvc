@@ -14,6 +14,13 @@ def cget_col_ids(
 ):
     if p <= 0:
         raise ValueError("ploidy must be greater than zero")
+    if p > 256:
+        raise ValueError("ploidy exceeds serialized GVC limit of 256")
+    if len(qci):
+        max_sample = int(np.max(qci))
+        max_uint32 = int(np.iinfo(np.uint32).max)
+        if max_sample > (max_uint32 - (p - 1)) // p:
+            raise ValueError("expanded sample index exceeds uint32 range")
 
     cdef np.ndarray[np.uint32_t, ndim=1] tqci = np.empty(len(qci)*p, dtype=np.uint32)
     set_tqci(tqci, qci, p, len(qci))

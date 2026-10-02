@@ -65,7 +65,9 @@ class MetaHandler:
             return
         with open(self.header_fpath, "w") as f:
             f.write(self.vcf_f.raw_header.strip())
-        sample_ids = np.array(self.vcf_f.raw_header.strip().split("\n")[-1].split("\t")[9:])
+        sample_ids = np.asarray(self.vcf_f.samples)
+        if sample_ids.ndim != 1:
+            raise ValueError("VCF sample list must be one-dimensional")
         np.save(join(self.metadata_dpath, "samples"), sample_ids)
 
     def proc_var(self, i_var, variant):
@@ -84,9 +86,13 @@ class MetaHandler:
         np.save(join(self.metadata_dpath, str(block_id)), positions)
 
     def end(self):
-        if not self.is_enabled or not self.min_max_pos_list:
+        if not self.is_enabled:
             return
-        np.save(join(self.metadata_dpath, "main"), np.stack(self.min_max_pos_list))
+        if self.min_max_pos_list:
+            root = np.stack(self.min_max_pos_list)
+        else:
+            root = np.empty((0, 2), dtype=np.uint64)
+        np.save(join(self.metadata_dpath, "main"), root)
 
 
 def reshape_trans_mat(mat, axis):
@@ -193,7 +199,15 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
                     "allele/phasing columns"
                 )
 
-            allele_matrix[i_var, :, :] = genotypes[:, :current_p]
+            allele_values = genotypes[:, :current_p]
+            signed_info = np.iinfo(gvc.common.SIGNED_ALLELE_DTYPE)
+            if np.any(allele_values < -2) or np.any(allele_values > signed_info.max):
+                raise ValueError(
+                    "VCF allele index is outside the supported range -2..{}".format(
+                        signed_info.max
+                    )
+                )
+            allele_matrix[i_var, :, :] = allele_values
             if current_p > 1:
                 # cyvcf2 uses True for "|" while GVC serializes 0 for "|" and
                 # 1 for "/". A single cyvcf2 phase flag is broadcast across

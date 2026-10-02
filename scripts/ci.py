@@ -160,7 +160,7 @@ def _run_external(cmd, cwd, env=None):
     )
 
 
-def _install_and_smoke_artifact(artifact, name):
+def install_and_smoke_artifact(artifact, name):
     venv_dir = PACKAGE_VENV_ROOT / name
     if venv_dir.exists():
         shutil.rmtree(str(venv_dir))
@@ -196,11 +196,14 @@ def _install_and_smoke_artifact(artifact, name):
         "import importlib.metadata as md; "
         "import gvc, gvc.cquery, gvc.cdebinarize, gvc.data_structures.crc_id; "
         "origin = Path(gvc.__file__).resolve(); "
+        "installed = md.version('gvc'); "
         "print('gvc origin:', origin); "
-        "print('gvc version:', md.version('gvc')); "
-        "assert md.version('gvc') == gvc.__version__; "
+        "print('gvc version:', installed); "
         "source = Path(" + repr(str(ROOT / "gvc")) + ").resolve(); "
-        "assert source != origin and source not in origin.parents"
+        "exec(\"if installed != gvc.__version__:\\n"
+        "    raise RuntimeError('installed metadata/version mismatch')\\n"
+        "if source == origin or source in origin.parents:\\n"
+        "    raise RuntimeError('artifact smoke imported source checkout')\")"
     )
     status = _run_external([py, "-c", code], cwd=outside, env=env)
     if status:
@@ -251,10 +254,14 @@ def packaging_gate():
         print("artifact inspection failed: {}".format(exc), file=sys.stderr)
         return 2
 
-    status = _install_and_smoke_artifact(wheels[0], "wheel")
+    status = install_and_smoke_artifact(wheels[0], "wheel")
     if status:
         return status
-    return _install_and_smoke_artifact(sdists[0], "sdist")
+    return install_and_smoke_artifact(sdists[0], "sdist")
+
+# Backward-compatible private alias for older callers/tests.
+_install_and_smoke_artifact = install_and_smoke_artifact
+
 
 def cli_gate():
     return run([sys.executable, "-m", "gvc", "--help"])

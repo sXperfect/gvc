@@ -362,3 +362,181 @@ def test_random_access_requires_metadata(framed_test_codec, tmp_path):
             decoder.random_access([100, 100], None)
     finally:
         _close_decoder(decoder)
+
+
+
+def test_decoder_rejects_duplicate_parameter_set_id(framed_test_codec, tmp_path):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "duplicate-parameter-set"
+    )
+    raw = encoded.read_bytes()
+    first_len = int.from_bytes(raw[1:5], "big")
+    duplicated = raw[:first_len] + raw
+    damaged = tmp_path / "duplicate-parameter-set.gvc"
+    damaged.write_bytes(duplicated)
+
+    with pytest.raises(ValueError, match="duplicate parameter_set_id"):
+        decoder = Decoder(str(damaged))
+        _close_decoder(decoder)
+
+
+def test_decoder_rejects_duplicate_access_unit_id(framed_test_codec, tmp_path):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "duplicate-access-unit-source"
+    )
+    raw = encoded.read_bytes()
+    parameter_len = int.from_bytes(raw[1:5], "big")
+    access_start = parameter_len
+    access_len = int.from_bytes(raw[access_start + 1:access_start + 5], "big")
+    access_unit = raw[access_start:access_start + access_len]
+    damaged = tmp_path / "duplicate-access-unit.gvc"
+    damaged.write_bytes(
+        raw[:access_start + access_len]
+        + access_unit
+        + raw[access_start + access_len:]
+    )
+
+    with pytest.raises(ValueError, match="duplicate access_unit_id"):
+        decoder = Decoder(str(damaged))
+        _close_decoder(decoder)
+
+
+def test_decoder_rejects_incomplete_metadata_sidecar(framed_test_codec, tmp_path):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "incomplete-metadata"
+    )
+    metadata = Path(str(encoded) + ".metadata")
+    (metadata / "main.npy").unlink()
+
+    with pytest.raises(FileNotFoundError):
+        decoder = Decoder(str(encoded))
+        _close_decoder(decoder)
+
+
+
+def test_decoder_rejects_metadata_sample_count_mismatch(
+    framed_test_codec,
+    tmp_path,
+):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "sample-count-mismatch"
+    )
+    metadata = Path(str(encoded) + ".metadata")
+    np.save(metadata / "samples.npy", np.array(["ONLY_ONE_SAMPLE"]))
+
+    with pytest.raises(ValueError, match="metadata sample count"):
+        decoder = Decoder(str(encoded))
+        _close_decoder(decoder)
+
+
+
+def test_sequential_encode_failure_preserves_existing_output(
+    framed_test_codec,
+    monkeypatch,
+    tmp_path,
+):
+    from gvc import encoder as encoder_module
+
+    output = tmp_path / "sequential-existing.gvc"
+    output.write_bytes(b"OLD-GVC")
+    metadata = Path(str(output) + ".metadata")
+    metadata.mkdir()
+    (metadata / "marker").write_text("OLD-METADATA")
+
+    def failing_run_core(*args, **kwargs):
+        raise RuntimeError("synthetic sequential failure")
+
+    monkeypatch.setattr(encoder_module, "run_core", failing_run_core)
+
+    with pytest.raises(RuntimeError, match="synthetic sequential failure"):
+        Encoder(
+            str(VCF_FIXTURE),
+            str(output),
+            binarization_name="bit_plane",
+            axis=2,
+            sort_rows=False,
+            sort_cols=False,
+            block_size=2,
+            codec_name="jbig",
+            num_threads=0,
+        ).run()
+
+    assert output.read_bytes() == b"OLD-GVC"
+    assert (metadata / "marker").read_text() == "OLD-METADATA"
+    assert not list(tmp_path.glob("sequential-existing.gvc.tmp.*"))
+    assert not list(tmp_path.glob("sequential-existing.gvc.tmp.*.metadata"))
+
+
+def test_sequential_success_replaces_existing_output_without_backup_leaks(
+    framed_test_codec,
+    tmp_path,
+):
+    output = tmp_path / "sequential-replace.gvc"
+    output.write_bytes(b"OLD-GVC")
+    metadata = Path(str(output) + ".metadata")
+    metadata.mkdir()
+    (metadata / "marker").write_text("OLD-METADATA")
+
+    Encoder(
+        str(VCF_FIXTURE),
+        str(output),
+        binarization_name="bit_plane",
+        axis=2,
+        sort_rows=False,
+        sort_cols=False,
+        block_size=2,
+        codec_name="jbig",
+        num_threads=0,
+    ).run()
+
+    assert output.read_bytes() != b"OLD-GVC"
+    assert not (metadata / "marker").exists()
+    assert (metadata / "main.npy").is_file()
+    assert (metadata / "samples.npy").is_file()
+    assert not list(tmp_path.glob("sequential-replace.gvc.gvc-backup-*"))
+    assert not list(tmp_path.glob("sequential-replace.gvc.metadata.gvc-backup-*"))
+    assert not list(tmp_path.glob("sequential-replace.gvc.tmp.*"))
+
+
+
+def test_decoder_context_manager_closes_owned_files(
+    framed_test_codec,
+    tmp_path,
+):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "decoder-context"
+    )
+    decoded = tmp_path / "decoder-context.txt"
+
+    with Decoder(str(encoded), str(decoded)) as decoder:
+        input_handle = decoder._f
+        output_handle = decoder._out_f
+        decoder.decode()
+
+    assert input_handle.closed
+    assert output_handle.closed
+    assert decoder._f is None
+    assert decoder._out_f is None
+
+
+
+def test_compare_handles_ploidy_induced_block_boundaries(
+    framed_test_codec,
+    tmp_path,
+):
+    encoded = tmp_path / "compare-mixed.gvc"
+
+    Encoder(
+        str(MIXED_PLOIDY_FIXTURE),
+        str(encoded),
+        binarization_name="bit_plane",
+        axis=2,
+        sort_rows=False,
+        sort_cols=False,
+        block_size=4,
+        codec_name="jbig",
+        num_threads=0,
+    ).run()
+
+    with Decoder(str(encoded)) as decoder:
+        decoder.compare(str(MIXED_PLOIDY_FIXTURE))

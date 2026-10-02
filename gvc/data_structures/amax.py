@@ -15,6 +15,8 @@ class VectorAMax:
             raise TypeError("AMax vector must contain integers")
         if vector.size and np.any(vector < 1):
             raise ValueError("AMax vector entries must be positive and non-zero")
+        if vector.size and np.any(vector > 8):
+            raise ValueError("AMax vector entries must not exceed 8")
         if vector.size >= (1 << (8 * consts.AMAX_NUM_ENTRIES_LEN)):
             raise ValueError("AMax vector has too many entries")
         self.vector = vector
@@ -30,6 +32,20 @@ class VectorAMax:
         bits_per_entry = istream.read_bytes(
             consts.AMAX_BITS_PER_ENTRY_LEN, ret_int=True
         )
+
+        if bits_per_entry > 3:
+            raise ValueError("AMax entry width exceeds uint8 allele format")
+
+        header_len = (
+            consts.AMAX_NUM_ENTRIES_LEN
+            + consts.AMAX_BITS_PER_ENTRY_LEN
+        )
+        remaining_bits = (len(data) - header_len) * 8
+        # Every entry requires at least its presence flag. Reject impossible
+        # counts before allocating the output vector so malformed input cannot
+        # trigger an attacker-controlled large allocation.
+        if num_entries > remaining_bits:
+            raise ValueError("AMax payload entry count exceeds available data")
 
         vector = np.ones(num_entries, dtype=np.uint64)
         for i in range(num_entries):

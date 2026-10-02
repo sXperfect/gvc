@@ -128,6 +128,12 @@ def main(argv=None):
 
     if args.repetitions <= 0:
         parser.error("--repetitions must be positive")
+    if args.block_size <= 0:
+        parser.error("--block-size must be positive")
+    if args.stall_timeout is not None and args.stall_timeout <= 0:
+        parser.error("--stall-timeout must be positive")
+    if args.binarization == "row_bin_split" and args.axis != 0:
+        parser.error("row_bin_split benchmark requires --axis 0")
     if any(value < 0 for value in args.workers):
         parser.error("--workers values must be non-negative")
     if len(set(args.workers)) != len(args.workers):

@@ -149,3 +149,74 @@ def test_reader_splits_blocks_when_ploidy_changes():
         diploid_phases,
         np.array([[False, True], [True, False]], dtype=bool),
     )
+
+
+
+def test_metadata_end_writes_empty_root_index(tmp_path):
+    class FakeVCF:
+        raw_header = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE_A"
+        )
+        samples = ["SAMPLE_A"]
+
+    metadata = tmp_path / "empty.gvc.metadata"
+    handler = reader.MetaHandler(FakeVCF(), str(metadata), block_size=4)
+    handler.init()
+    handler.end()
+
+    root = np.load(metadata / "main.npy", allow_pickle=False)
+    assert root.shape == (0, 2)
+    assert root.dtype == np.uint64
+
+
+
+def test_vcf_reader_rejects_allele_index_that_overflows_working_dtype(monkeypatch):
+    class FakeGenotype:
+        def array(self):
+            return np.array([[128, 0, 1]], dtype=np.int16)
+
+    class FakeVariant:
+        ploidy = 2
+        POS = 100
+        genotype = FakeGenotype()
+
+    class FakeVCF:
+        raw_header = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE_A"
+        )
+        samples = ["SAMPLE_A"]
+
+        def __init__(self, *args, **kwargs):
+            self._variants = [FakeVariant()]
+
+        def __iter__(self):
+            return iter(self._variants)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(reader, "_vcf_class", lambda: FakeVCF)
+
+    with pytest.raises(ValueError, match="outside the supported range"):
+        list(reader.vcf_genotypes_reader("synthetic.vcf", None, block_size=1))
+
+
+
+def test_metadata_samples_use_authoritative_vcf_sample_list(tmp_path):
+    class FakeVCF:
+        raw_header = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tWRONG"
+        )
+        samples = ["SAMPLE_A", "SAMPLE_B"]
+
+    metadata = tmp_path / "samples.gvc.metadata"
+    handler = reader.MetaHandler(FakeVCF(), str(metadata), block_size=4)
+    handler.init()
+
+    np.testing.assert_array_equal(
+        np.load(metadata / "samples.npy", allow_pickle=False),
+        np.array(["SAMPLE_A", "SAMPLE_B"]),
+    )

@@ -115,10 +115,10 @@ def decode_encoded_variants(
     if param_set.binarization_id == consts.BinarizationID.BIT_PLANE:
         additional_info = param_set.num_bin_mat
     elif param_set.binarization_id in [consts.BinarizationID.ROW_BIN_SPLIT]:
-        try:
-            variants_amax_payload = encoded_variants.variants_amax_payload.read()
-        except:
-            variants_amax_payload = encoded_variants.variants_amax_payload
+        variants_amax_payload = encoded_variants.variants_amax_payload
+        payload_reader = getattr(variants_amax_payload, "read", None)
+        if payload_reader is not None:
+            variants_amax_payload = payload_reader()
             
         additional_info = ds.VectorAMax.from_bytes(variants_amax_payload).vector
             
@@ -392,8 +392,11 @@ def _get_tensor_shape(
             header_bytes = enc_var.variants_payloads[i_bin_mat].read(jbig.BIE_HEADER_LEN)
             bin_mat_nrows, bin_mat_ncols = jbig.get_shape(header_bytes)
         else:
-            # TODO: for additional codec
-            raise NotImplementedError("")
+            raise ValueError(
+                "unsupported codec id for matrix shape inspection: {}".format(
+                    param_set.variants_coder_ids[i_bin_mat]
+                )
+            )
 
         if param_set.transpose_variants_mat_flags[i_bin_mat]:
 
@@ -449,16 +452,20 @@ class DecoderContext(object):
     def set_access_unit(self, access_unit_id):
         try:
             self.curr_access_unit = self.access_units[access_unit_id]
-        except KeyError:
+        except KeyError as exc:
             log.error('No access unit with id {} found'.format(access_unit_id))
-            raise gvc.errors.GvcError()
+            raise ValueError(
+                'No access unit with id {} found'.format(access_unit_id)
+            ) from exc
 
         parameter_set_id = self.curr_access_unit.header.parameter_set_id
         try:
             self.curr_parameter_set = self.parameter_sets[parameter_set_id]
-        except KeyError:
+        except KeyError as exc:
             log.error('No parameter set with id {} found'.format(parameter_set_id))
-            raise gvc.errors.GvcError()
+            raise ValueError(
+                'No parameter set with id {} found'.format(parameter_set_id)
+            ) from exc
 
     def __len__(self):
         return len(self.parameter_sets)
@@ -483,26 +490,60 @@ class Decoder(object):
 
         self.input_fpath = input_fpath
         self.output_fpath = output_fpath
-        self._f = open(self.input_fpath, 'rb')
-        self._bitstream_reader = gvc.bitstream.BitstreamReader(self._f)
-
+        self._f = None
+        self._out_f = None
+        self._bitstream_reader = None
         self.decoder_context = DecoderContext()
-        self._cache_data()
+        self.index = None
 
-        self.index = ds.Index.from_gvc_fpath(input_fpath, self.decoder_context)
-        
-        if output_fpath is not None:
-            self._out_f = open(self.output_fpath, 'w')
-        else:
-            self._out_f = None
+        try:
+            self._f = open(self.input_fpath, 'rb')
+            self._bitstream_reader = gvc.bitstream.BitstreamReader(self._f)
+            self._cache_data()
+            self.index = ds.Index.from_gvc_fpath(
+                input_fpath, self.decoder_context
+            )
+
+            if output_fpath is not None:
+                self._out_f = open(self.output_fpath, 'w')
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        if self._out_f is not None:
+            try:
+                self._out_f.close()
+            finally:
+                self._out_f = None
+        if self._f is not None:
+            try:
+                self._f.close()
+            finally:
+                self._f = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
 
     def _decode_parameter_set(self):
         log.info('decoding parameter set')
 
         header = ds.DataUnitHeader.from_bitstream(consts.DataUnitType.PARAMETER_SET,
                                                self._bitstream_reader)
-        param_set = ds.ParameterSet.from_bitstream(self._bitstream_reader,
-                                                                    header)
+        param_set = ds.ParameterSet.from_bitstream(
+            self._bitstream_reader,
+            header,
+        )
+        if param_set.parameter_set_id in self.decoder_context.parameter_sets:
+            raise ValueError(
+                "duplicate parameter_set_id: {}".format(
+                    param_set.parameter_set_id
+                )
+            )
         self.decoder_context.parameter_sets[param_set.parameter_set_id] = param_set
 
     def _cache_access_unit(self):
@@ -525,14 +566,23 @@ class Decoder(object):
             nrows += tensor_shape[0]
 
             if self.decoder_context.ncols is not None:
-                if tensor_shape[1] != self.decoder_context.ncols or tensor_shape[2] != param_set.p:
-                    log.error('Tensor shape not consistent')
+                if tensor_shape[1] != self.decoder_context.ncols:
+                    raise ValueError(
+                        "tensor sample count is inconsistent: expected {}, got {}".format(
+                            self.decoder_context.ncols,
+                            tensor_shape[1],
+                        )
+                    )
             else:
                 self.decoder_context.ncols = tensor_shape[1]
 
         #? Preallocate list with values None
         #? Created to handle case where access unit id stored is not in order
         access_unit_id = acc_unit.header.access_unit_id
+        if access_unit_id in self.decoder_context.access_units:
+            raise ValueError(
+                "duplicate access_unit_id: {}".format(access_unit_id)
+            )
         if len(self.decoder_context.nrows) <= access_unit_id:
             for _ in range(access_unit_id - len(self.decoder_context.nrows)):
                 self.decoder_context.nrows.append(None)
@@ -602,9 +652,9 @@ class Decoder(object):
                         block.block_payload,
                     )
                 
-                try:
+                if self._out_f is not None:
                     self._out_f.write(out)
-                except AttributeError:
+                else:
                     print(out)
 
                 log.info("Decoding time:{:.3f}".format(t.time))
@@ -663,51 +713,103 @@ class Decoder(object):
             print(combined, end="")
         return combined
 
-    def compare(self,
-        orig_fpath
-    ):
-        
-        block_size = None
+    def compare(self, orig_fpath):
+        reader_it = iter(vcf_genotypes_reader(orig_fpath, None, 1))
+
         for i_access_unit in range(self.num_access_units):
             self.decoder_context.set_access_unit(i_access_unit)
-            
-            for i_block, block in enumerate(self.decoder_context.curr_access_unit.blocks):
-                log.info('Comparing content from AC:{} BLK:{}'.format(i_access_unit, i_block))
 
-                with utils.catchtime() as t:
-                    recon_allele_matrix, recon_phasing_mat = decode_encoded_variants(
-                        self.decoder_context.curr_parameter_set,
-                        block.block_payload,
-                        ret_gt=False
+            for i_block, block in enumerate(
+                self.decoder_context.curr_access_unit.blocks
+            ):
+                log.info(
+                    "Comparing content from AC:{} BLK:{}".format(
+                        i_access_unit, i_block
+                    )
+                )
+
+                with utils.catchtime() as timer:
+                    recon_allele_matrix, recon_phasing_mat = (
+                        decode_encoded_variants(
+                            self.decoder_context.curr_parameter_set,
+                            block.block_payload,
+                            ret_gt=False,
+                        )
                     )
 
-                log.info("Decoding time:{:.3f}".format(t.time))
-        
-                if block_size is None:
-                    #? Initialize VCF Reader
-                    block_size = recon_allele_matrix.shape[0]
-                    reader = vcf_genotypes_reader(orig_fpath, None, block_size)
-                    reader_it = iter(reader)
-                    
-                allele_matrix, phasing_matrix, p, missing_rep_val, na_rep_val = next(reader_it)
-                allele_matrix = binarization.undo_adaptive_max_value(
-                    allele_matrix, missing_rep_val, na_rep_val,
-                )
-                
-                #? Compare
-                assert np.array_equal(allele_matrix, recon_allele_matrix), "Allele matrix differ".format(i_access_unit, i_block)
+                log.info("Decoding time:{:.3f}".format(timer.time))
 
-                #? Handle phasing value. If the phasing matrix is uniform, take a single value for the comparison
+                source_alleles = []
+                source_phases = []
+                for _ in range(recon_allele_matrix.shape[0]):
+                    try:
+                        (
+                            allele_matrix,
+                            phasing_matrix,
+                            source_p,
+                            missing_rep_val,
+                            na_rep_val,
+                        ) = next(reader_it)
+                    except StopIteration as exc:
+                        raise ValueError(
+                            "encoded stream contains more variants than original VCF"
+                        ) from exc
+
+                    if source_p != self.decoder_context.curr_parameter_set.p:
+                        raise ValueError(
+                            "original VCF ploidy does not match encoded parameter set"
+                        )
+                    source_alleles.append(
+                        binarization.undo_adaptive_max_value(
+                            allele_matrix,
+                            missing_rep_val,
+                            na_rep_val,
+                        )
+                    )
+                    source_phases.append(phasing_matrix)
+
+                allele_matrix = np.concatenate(source_alleles, axis=0)
+                phasing_matrix = np.concatenate(source_phases, axis=0)
+
+                if not np.array_equal(
+                    allele_matrix,
+                    recon_allele_matrix,
+                ):
+                    raise ValueError(
+                        "allele matrix differs at access unit {} block {}".format(
+                            i_access_unit, i_block
+                        )
+                    )
+
                 if np.all(phasing_matrix == 0) or np.all(phasing_matrix == 1):
-                    phasing_val = phasing_matrix[0][0]
-                    assert phasing_val == recon_phasing_mat, "Phasing value differ".format(i_access_unit, i_block)
-                else:
-                    assert np.array_equal(phasing_matrix, recon_phasing_mat)
-                    
-                log.info("Contents match!".format(i_access_unit, i_block))
-                
+                    if phasing_matrix.size:
+                        phasing_val = phasing_matrix.flat[0]
+                    else:
+                        phasing_val = 0
+                    if bool(phasing_val) != bool(recon_phasing_mat):
+                        raise ValueError(
+                            "phasing value differs at access unit {} block {}".format(
+                                i_access_unit, i_block
+                            )
+                        )
+                elif not np.array_equal(
+                    phasing_matrix,
+                    recon_phasing_mat,
+                ):
+                    raise ValueError(
+                        "phasing matrix differs at access unit {} block {}".format(
+                            i_access_unit, i_block
+                        )
+                    )
+
+                log.info("Contents match!")
+
         try:
             next(reader_it)
-            raise ValueError("There are more data in the original vcf file than the encoded one!")
         except StopIteration:
             log.info("Comparison is complete")
+        else:
+            raise ValueError(
+                "original VCF contains more variants than encoded stream"
+            )
+

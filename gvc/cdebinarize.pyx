@@ -29,6 +29,8 @@ def debin_rc_bin_split(np.ndarray[bool, ndim=2, cast=True] bin_mat, np.ndarray[u
 
     if np.any(bitlen_vect == 0):
         raise ValueError("bit-length vector entries must be positive")
+    if np.any(bitlen_vect > 8):
+        raise ValueError("bit-length vector entries must not exceed 8")
     if int(np.sum(bitlen_vect, dtype=np.uint64)) != bin_mat.shape[0]:
         raise ValueError("bit-length vector does not match encoded row count")
 
@@ -74,6 +76,8 @@ cdef char gt_val_to_gt_char(np.int8_t v):
 def recon_gt_mat_with_phase_val(np.ndarray[np.int8_t, ndim=2] allele_mat, bool phase_val, int p):
     if p <= 0:
         raise ValueError("ploidy must be greater than zero")
+    if p > 256:
+        raise ValueError("ploidy exceeds serialized GVC limit of 256")
     if allele_mat.shape[1] % p != 0:
         raise ValueError("allele matrix column count must be divisible by ploidy")
     if allele_mat.size and (np.min(allele_mat) < -1 or np.max(allele_mat) > 9):

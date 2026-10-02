@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+HISTORICAL_FIXTURE_GIT_BLOB = "af45a419e46563906ac51fad0be869291316cea9"
 
 
 def _run(command, env=None):
@@ -88,6 +89,18 @@ def _git_dirty():
 
 def _git_blob(path):
     return _git_output("hash-object", str(path))
+
+
+def _install_and_smoke_artifact(path, name):
+    from scripts import ci
+
+    status = ci.install_and_smoke_artifact(Path(path).resolve(), name)
+    if status:
+        raise RuntimeError(
+            "{} artifact install/smoke failed with status {}".format(
+                name, status
+            )
+        )
 
 
 def _record_file(path):
@@ -211,6 +224,23 @@ def main(argv=None):
         },
         "steps": [],
     }
+    if args.rc and evidence["fixture"]["git_blob"] != HISTORICAL_FIXTURE_GIT_BLOB:
+        evidence["steps"].append(
+            {
+                "name": "historical_fixture_identity",
+                "status": "fail",
+                "error": (
+                    "RC validation requires pinned historical fixture blob {}"
+                    .format(HISTORICAL_FIXTURE_GIT_BLOB)
+                ),
+                "actual_git_blob": evidence["fixture"]["git_blob"],
+            }
+        )
+        evidence["status"] = "fail"
+        evidence["completed_unix"] = time.time()
+        _write_evidence(args.evidence_output, evidence)
+        raise RuntimeError("RC validation historical fixture identity mismatch")
+
     if args.rc and evidence["git_dirty"]:
         evidence["steps"].append(
             {
@@ -278,6 +308,8 @@ def main(argv=None):
             artifact_data = json.loads(
                 artifact_evidence.read_text(encoding="utf-8")
             )
+            _install_and_smoke_artifact(wheels[0], "release-wheel")
+            _install_and_smoke_artifact(sdists[0], "release-sdist")
         except Exception as exc:
             evidence["steps"].append(
                 {
@@ -298,6 +330,7 @@ def main(argv=None):
                 "version": version,
                 "evidence": _record_file(artifact_evidence),
                 "artifacts": artifact_data["artifacts"],
+                "install_smoke": ["wheel", "sdist"],
             }
         )
 
@@ -394,6 +427,7 @@ def main(argv=None):
             str(benchmark_output),
             "--require-same-configurations",
             "--require-compatible-environment",
+            "--require-complete-metrics",
             "--output",
             str(comparison_output),
         ]

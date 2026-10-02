@@ -139,3 +139,122 @@ def test_adaptive_max_value_accepts_reader_tensor():
         encoded.copy(), missing_value, na_value
     )
     np.testing.assert_array_equal(restored, source)
+
+
+
+def test_adaptive_missing_roundtrip_at_int8_upper_boundary():
+    source = np.array([[127, -1, -2, 0]], dtype=np.int8)
+
+    encoded, missing_value, na_value = binarization.adaptive_max_value(source)
+
+    assert int(missing_value) == 128
+    assert int(na_value) == 129
+    restored = binarization.undo_adaptive_max_value(
+        encoded, missing_value, na_value
+    )
+    np.testing.assert_array_equal(restored, source)
+
+
+
+def test_matrix_to_tensor_rejects_invalid_grouping():
+    matrix = np.zeros((2, 5), dtype=np.uint8)
+
+    with pytest.raises(ValueError, match="positive"):
+        binarization.matrix_to_tensor(matrix, 0)
+
+    with pytest.raises(ValueError, match="divisible"):
+        binarization.matrix_to_tensor(matrix, 2)
+
+
+
+def test_split_genotype_matrix_rejects_allele_above_int8_range():
+    with pytest.raises(ValueError, match="supported range"):
+        binarization.split_genotype_matrix(["128|0\n"])
+
+
+
+@pytest.mark.parametrize(
+    "matrix",
+    [
+        np.array([[300]], dtype=np.int16),
+        np.array([[-3]], dtype=np.int16),
+    ],
+)
+def test_adaptive_max_value_rejects_out_of_range_alleles(matrix):
+    with pytest.raises(ValueError, match="within -2"):
+        binarization.adaptive_max_value(matrix)
+
+
+def test_debin_bit_plane_rejects_depth_beyond_uint8():
+    plane = np.zeros((1, 1), dtype=bool)
+
+    with pytest.raises(ValueError, match="exceeds uint8"):
+        binarization.debin_bit_plane([plane] * 9, bit_depth=9, axis=2)
+
+
+
+def test_split_genotype_matrix_handles_multi_digit_alleles():
+    allele_matrix, phase_matrix, ploidy = binarization.split_genotype_matrix(
+        ["10|11\t2/12\n"]
+    )
+
+    assert ploidy == 2
+    np.testing.assert_array_equal(
+        allele_matrix,
+        np.array([[10, 11, 2, 12]], dtype=np.int8),
+    )
+    np.testing.assert_array_equal(
+        phase_matrix,
+        np.array([[0, 1]], dtype=bool),
+    )
+
+
+def test_split_genotype_matrix_handles_mixed_ploidy_by_padding():
+    allele_matrix, phase_matrix, ploidy = binarization.split_genotype_matrix(
+        ["1\t2|3\n"]
+    )
+
+    assert ploidy == 2
+    np.testing.assert_array_equal(
+        allele_matrix,
+        np.array([[1, -2, 2, 3]], dtype=np.int8),
+    )
+    np.testing.assert_array_equal(
+        phase_matrix,
+        np.array([[0, 0]], dtype=bool),
+    )
+
+
+
+def test_row_bin_inverse_rejects_multiple_matrices():
+    matrix = np.zeros((1, 1), dtype=bool)
+    with pytest.raises(ValueError, match="exactly one binary matrix"):
+        binarization.debin_row_bin_split(
+            [matrix, matrix],
+            np.array([1], dtype=np.uint16),
+        )
+
+
+def test_row_bin_inverse_rejects_bit_length_above_uint8_width():
+    matrix = np.zeros((9, 1), dtype=bool)
+    with pytest.raises(ValueError, match="within 1..8"):
+        binarization.debin_row_bin_split(
+            [matrix],
+            np.array([9], dtype=np.uint16),
+        )
+
+
+
+@pytest.mark.parametrize("value", [-2, 10, 127])
+def test_gt_val_to_gt_char_rejects_out_of_single_digit_range(value):
+    with pytest.raises(ValueError, match="single-character genotype"):
+        binarization.gt_val_to_gt_char(value)
+
+
+def test_unimplemented_legacy_phasing_reconstruction_fails_explicitly():
+    with pytest.raises(NotImplementedError, match="not implemented"):
+        binarization.recon_gt_mat_using_phasing_mat(
+            np.zeros((1, 2), dtype=np.int8),
+            np.zeros((1, 1), dtype=bool),
+            2,
+        )

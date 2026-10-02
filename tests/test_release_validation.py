@@ -187,6 +187,11 @@ def test_rc_artifact_failure_persists_evidence(monkeypatch, tmp_path):
     evidence = tmp_path / "evidence.json"
 
     monkeypatch.setattr(run_release_validation, "_git_dirty", lambda: False)
+    monkeypatch.setattr(
+        run_release_validation,
+        "_git_blob",
+        lambda path: run_release_validation.HISTORICAL_FIXTURE_GIT_BLOB,
+    )
     monkeypatch.setattr(run_release_validation, "_package_version", lambda: "1.0.1rc1")
 
     def fake_run(command, env=None):
@@ -247,6 +252,11 @@ def test_rc_dirty_worktree_persists_failure_evidence(monkeypatch, tmp_path):
     evidence = tmp_path / "evidence.json"
 
     monkeypatch.setattr(run_release_validation, "_git_dirty", lambda: True)
+    monkeypatch.setattr(
+        run_release_validation,
+        "_git_blob",
+        lambda path: run_release_validation.HISTORICAL_FIXTURE_GIT_BLOB,
+    )
     monkeypatch.setattr(run_release_validation, "_package_version", lambda: "1.0.1rc1")
 
     with pytest.raises(RuntimeError, match="clean git worktree"):
@@ -269,3 +279,145 @@ def test_rc_dirty_worktree_persists_failure_evidence(monkeypatch, tmp_path):
     assert payload["steps"][-1]["name"] == "clean_worktree"
     assert payload["steps"][-1]["status"] == "fail"
     assert "clean git worktree" in payload["steps"][-1]["error"]
+
+
+
+def test_release_validation_requires_complete_metric_comparison(
+    monkeypatch,
+    tmp_path,
+):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"fixture")
+    benchmark = tmp_path / "benchmark.json"
+    baseline = tmp_path / "baseline.json"
+    evidence = tmp_path / "evidence.json"
+    baseline.write_text(
+        json.dumps({"schema_version": 1, "configurations": []}),
+        encoding="utf-8",
+    )
+
+    commands = []
+
+    def fake_run(command, env=None):
+        commands.append(list(command))
+        if "benchmarks/run_release.py" in command:
+            benchmark.write_text(
+                json.dumps({"schema_version": 1, "configurations": []}),
+                encoding="utf-8",
+            )
+        if "benchmarks/compare_release.py" in command:
+            output_index = command.index("--output") + 1
+            Path(command[output_index]).write_text(
+                json.dumps({}),
+                encoding="utf-8",
+            )
+
+    monkeypatch.setattr(run_release_validation, "_run", fake_run)
+
+    assert run_release_validation.main(
+        [
+            str(fixture),
+            "--benchmark-output",
+            str(benchmark),
+            "--evidence-output",
+            str(evidence),
+            "--baseline",
+            str(baseline),
+            "--max-regression-percent",
+            "5",
+            "--workers",
+            "0",
+            "--repetitions",
+            "1",
+            "--historical-max-blocks",
+            "1",
+        ]
+    ) == 0
+
+    compare_commands = [
+        command
+        for command in commands
+        if "benchmarks/compare_release.py" in command
+    ]
+    assert len(compare_commands) == 1
+    assert "--require-complete-metrics" in compare_commands[0]
+
+
+
+def test_rc_validation_rejects_wrong_historical_fixture_identity(
+    monkeypatch,
+    tmp_path,
+):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"wrong fixture")
+    evidence = tmp_path / "evidence.json"
+
+    monkeypatch.setattr(run_release_validation, "_git_dirty", lambda: False)
+    monkeypatch.setattr(run_release_validation, "_package_version", lambda: "1.0.1rc1")
+    monkeypatch.setattr(run_release_validation, "_git_blob", lambda path: "0" * 40)
+
+    with pytest.raises(RuntimeError, match="fixture identity mismatch"):
+        run_release_validation.main(
+            [
+                str(fixture),
+                "--benchmark-output",
+                str(tmp_path / "benchmark.json"),
+                "--evidence-output",
+                str(evidence),
+                "--rc",
+                "--historical-max-blocks",
+                "0",
+                "--include-sorting",
+            ]
+        )
+
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    assert payload["status"] == "fail"
+    assert payload["steps"][-1]["name"] == "historical_fixture_identity"
+    assert payload["steps"][-1]["actual_git_blob"] == "0" * 40
+
+
+
+def test_release_artifact_smoke_helper_uses_ci_installer(
+    monkeypatch,
+    tmp_path,
+):
+    from scripts import ci
+
+    artifact = tmp_path / "artifact.whl"
+    artifact.write_bytes(b"x")
+    calls = []
+
+    def fake_install(path, name):
+        calls.append((Path(path), name))
+        return 0
+
+    monkeypatch.setattr(ci, "install_and_smoke_artifact", fake_install)
+
+    run_release_validation._install_and_smoke_artifact(
+        artifact,
+        "release-wheel",
+    )
+
+    assert calls == [(artifact.resolve(), "release-wheel")]
+
+
+def test_release_artifact_smoke_helper_rejects_failed_install(
+    monkeypatch,
+    tmp_path,
+):
+    from scripts import ci
+
+    artifact = tmp_path / "artifact.tar.gz"
+    artifact.write_bytes(b"x")
+    monkeypatch.setattr(
+        ci,
+        "install_and_smoke_artifact",
+        lambda path, name: 7,
+    )
+
+    with pytest.raises(RuntimeError, match="status 7"):
+        run_release_validation._install_and_smoke_artifact(
+            artifact,
+            "release-sdist",
+        )

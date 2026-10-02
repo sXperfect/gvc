@@ -61,7 +61,7 @@ def test_index_overlap_queries_and_sample_lookup(tmp_path):
 
 
 def test_index_validates_metadata_and_row_positions(tmp_path):
-    np.save(tmp_path / "main.npy", np.array([[100, 199]], dtype=np.uint64))
+    np.save(tmp_path / "main.npy", np.array([[100, 120]], dtype=np.uint64))
     np.save(tmp_path / "samples.npy", np.array(["S1"]))
     np.save(tmp_path / "0.npy", np.array([100, 110, 120], dtype=np.uint64))
 
@@ -83,3 +83,22 @@ def test_index_rejects_metadata_block_count_mismatch(tmp_path):
     np.save(tmp_path / "samples.npy", np.array(["S1"]))
     with pytest.raises(ValueError, match="block count"):
         Index(str(tmp_path), _decoder_context([object()]))
+
+
+
+def test_index_rejects_noninteger_root_positions(tmp_path):
+    np.save(tmp_path / "main.npy", np.array([[100.0, 120.0]], dtype=np.float64))
+    np.save(tmp_path / "samples.npy", np.array(["S1"]))
+
+    with pytest.raises(TypeError, match="root index positions"):
+        Index(str(tmp_path), _decoder_context([object()]))
+
+
+def test_index_rejects_block_positions_that_disagree_with_root(tmp_path):
+    np.save(tmp_path / "main.npy", np.array([[100, 120]], dtype=np.uint64))
+    np.save(tmp_path / "samples.npy", np.array(["S1"]))
+    np.save(tmp_path / "0.npy", np.array([100, 110, 119], dtype=np.uint64))
+
+    index = Index(str(tmp_path), _decoder_context([object()]))
+    with pytest.raises(ValueError, match="does not match root index bounds"):
+        index.get_row_mask(0, 100, 120)

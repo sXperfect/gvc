@@ -167,3 +167,67 @@ def test_compare_release_cli_writes_machine_readable_output(tmp_path):
     assert payload["require_same_configurations"] is True
     assert payload["require_compatible_environment"] is True
     assert payload["failures"] == []
+
+
+
+def test_compare_release_reports_metric_availability_mismatch():
+    baseline_config = _config(2)
+    candidate_config = _config(2)
+    candidate_config.pop("encode_seconds_median")
+
+    result = compare_reports(
+        _report([baseline_config]),
+        _report([candidate_config]),
+    )
+
+    assert result["metric_availability_mismatches"] == [
+        (
+            (
+                2,
+                None,
+                128,
+                "bit_plane",
+                2,
+                False,
+                False,
+                False,
+            ),
+            "encode_seconds_median",
+            True,
+            False,
+        )
+    ]
+
+
+def test_compare_release_zero_higher_is_better_baseline_is_improvement():
+    baseline = _report([_config(2, encode_vps=0.0)])
+    candidate = _report([_config(2, encode_vps=10.0)])
+
+    result = compare_reports(baseline, candidate, threshold_percent=1.0)
+    assert not result["failures"]
+
+
+def test_compare_release_cli_rejects_metric_availability_mismatch(tmp_path):
+    from benchmarks import compare_release
+
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+
+    old = _config(2)
+    new = _config(2)
+    new.pop("decode_seconds_median")
+
+    baseline.write_text(
+        json.dumps({"schema_version": 1, "configurations": [old]}),
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        json.dumps({"schema_version": 1, "configurations": [new]}),
+        encoding="utf-8",
+    )
+
+    assert compare_release.main([
+        str(baseline),
+        str(candidate),
+        "--require-complete-metrics",
+    ]) == 1

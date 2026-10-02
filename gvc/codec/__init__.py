@@ -18,6 +18,20 @@ MAT_CODECS = {
 AVAIL_CODECS = [v['name'] for v in MAT_CODECS.values()]
 CODEC_STR2ID = {v["name"]:k for k, v in MAT_CODECS.items()}
 
+
+def _codec_entry(coder_id):
+    try:
+        return MAT_CODECS[coder_id]
+    except KeyError as exc:
+        raise ValueError(
+            "unsupported codec id: {}".format(int(coder_id))
+        ) from exc
+
+def _read_payload(payload):
+    reader = getattr(payload, "read", None)
+    return reader() if reader is not None else payload
+
+
 def decode_permutation(payload, num_entries):
     permutation = RowColIds.from_bytes(payload, num_entries).ids
     return permutation
@@ -79,7 +93,7 @@ def encode(
 
         log.info('Encode matrix number {}'.format(i))
         encoder_id = param_set.variants_coder_ids[i]
-        encoder_f = MAT_CODECS[encoder_id]["encoder"]
+        encoder_f = _codec_entry(encoder_id)["encoder"]
         matrix_bytes = encoder_f(matrix)
 
         sorted_allele_mat_payloads.append(matrix_bytes)
@@ -113,7 +127,7 @@ def encode(
 
     if param_set.encode_phase_data:
         encoder_id = param_set.phase_coder_ids
-        encoder_f = MAT_CODECS[encoder_id]["encoder"]
+        encoder_f = _codec_entry(encoder_id)["encoder"]
         sorted_phase_mat_payload = encoder_f(sorted_phase_mat)
 
         if param_set.sort_phases_row_flag:
@@ -142,30 +156,21 @@ def decode(
     coder_id:int,
     unsort=True
 ):
-    try:
-        bin_mat_payload = bin_mat_payload.read()
-    except AttributeError:
-        pass
+    bin_mat_payload = _read_payload(bin_mat_payload)
 
-    decode_f = MAT_CODECS[coder_id]["decoder"]
+    decode_f = _codec_entry(coder_id)["decoder"]
     bin_mat = decode_f(bin_mat_payload)
     nrows, ncols = bin_mat.shape
     
     if row_ids_payload is not None:
-        try:
-            row_ids_payload = row_ids_payload.read()
-        except AttributeError:
-            pass
+        row_ids_payload = _read_payload(row_ids_payload)
         
         row_ids = decode_permutation(row_ids_payload, nrows)
     else:
         row_ids = None
 
     if col_ids_payload is not None:
-        try:
-            col_ids_payload = col_ids_payload.read()
-        except AttributeError:
-            pass
+        col_ids_payload = _read_payload(col_ids_payload)
 
         col_ids = decode_permutation(col_ids_payload, ncols)
     else:

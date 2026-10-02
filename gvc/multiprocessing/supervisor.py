@@ -13,6 +13,82 @@ from pathlib import Path
 from .messages import Progress, ReaderDone, WorkerError, WriterDone
 
 
+def _metadata_path(path):
+    return Path(str(path) + ".metadata")
+
+
+def cleanup_output_pair(temp_output):
+    """Remove a temporary GVC file and its metadata sidecar."""
+    temp_output = Path(temp_output)
+    try:
+        temp_output.unlink()
+    except FileNotFoundError:
+        pass
+    temp_metadata = _metadata_path(temp_output)
+    if temp_metadata.exists():
+        shutil.rmtree(str(temp_metadata), ignore_errors=True)
+
+
+def _backup_path(path):
+    return Path(
+        str(path)
+        + ".gvc-backup-{}-{}".format(
+            os.getpid(),
+            uuid.uuid4().hex,
+        )
+    )
+
+
+def commit_output_pair(temp_output, final_output):
+    """Atomically publish a GVC file + metadata pair with rollback."""
+    temp_output = Path(temp_output)
+    final_output = Path(final_output)
+    temp_metadata = _metadata_path(temp_output)
+    final_metadata = _metadata_path(final_output)
+
+    final_output.parent.mkdir(parents=True, exist_ok=True)
+    file_backup = _backup_path(final_output)
+    metadata_backup = _backup_path(final_metadata)
+
+    for backup in (file_backup, metadata_backup):
+        if backup.is_dir():
+            shutil.rmtree(str(backup))
+        elif backup.exists():
+            backup.unlink()
+
+    file_had_old = final_output.exists()
+    metadata_had_old = final_metadata.exists()
+
+    try:
+        if file_had_old:
+            os.replace(str(final_output), str(file_backup))
+        if metadata_had_old:
+            os.replace(str(final_metadata), str(metadata_backup))
+
+        os.replace(str(temp_output), str(final_output))
+        if temp_metadata.exists():
+            os.replace(str(temp_metadata), str(final_metadata))
+
+    except BaseException:
+        try:
+            if final_output.exists():
+                final_output.unlink()
+            if final_metadata.exists():
+                shutil.rmtree(str(final_metadata))
+            if file_had_old and file_backup.exists():
+                os.replace(str(file_backup), str(final_output))
+            if metadata_had_old and metadata_backup.exists():
+                os.replace(str(metadata_backup), str(final_metadata))
+        finally:
+            cleanup_output_pair(temp_output)
+        raise
+    else:
+        if file_backup.exists():
+            file_backup.unlink()
+        if metadata_backup.exists():
+            shutil.rmtree(str(metadata_backup))
+
+
 class MultiprocessingEncodeError(RuntimeError):
     """Raised when any child in the encode pipeline fails."""
 
@@ -100,11 +176,11 @@ class EncodeProcessSupervisor:
 
     @property
     def temp_metadata(self):
-        return Path(str(self.temp_output) + ".metadata")
+        return _metadata_path(self.temp_output)
 
     @property
     def final_metadata(self):
-        return Path(str(self.final_output) + ".metadata")
+        return _metadata_path(self.final_output)
 
     def start(self):
         for proc in self.processes:
@@ -305,66 +381,11 @@ class EncodeProcessSupervisor:
                 pass
 
     def cleanup_temp(self):
-        try:
-            self.temp_output.unlink()
-        except FileNotFoundError:
-            pass
-        if self.temp_metadata.exists():
-            shutil.rmtree(str(self.temp_metadata), ignore_errors=True)
-
-    @staticmethod
-    def _backup_path(path):
-        return Path(
-            str(path)
-            + ".gvc-backup-{}-{}".format(
-                os.getpid(),
-                uuid.uuid4().hex,
-            )
-        )
+        cleanup_output_pair(self.temp_output)
 
     def commit(self):
         """Replace final file + sidecar with rollback on partial failure."""
-        self.final_output.parent.mkdir(parents=True, exist_ok=True)
-        file_backup = self._backup_path(self.final_output)
-        metadata_backup = self._backup_path(self.final_metadata)
-
-        for backup in (file_backup, metadata_backup):
-            if backup.is_dir():
-                shutil.rmtree(str(backup))
-            elif backup.exists():
-                backup.unlink()
-
-        file_had_old = self.final_output.exists()
-        metadata_had_old = self.final_metadata.exists()
-
-        try:
-            if file_had_old:
-                os.replace(str(self.final_output), str(file_backup))
-            if metadata_had_old:
-                os.replace(str(self.final_metadata), str(metadata_backup))
-
-            os.replace(str(self.temp_output), str(self.final_output))
-            if self.temp_metadata.exists():
-                os.replace(str(self.temp_metadata), str(self.final_metadata))
-
-        except BaseException:
-            try:
-                if self.final_output.exists():
-                    self.final_output.unlink()
-                if self.final_metadata.exists():
-                    shutil.rmtree(str(self.final_metadata))
-                if file_had_old and file_backup.exists():
-                    os.replace(str(file_backup), str(self.final_output))
-                if metadata_had_old and metadata_backup.exists():
-                    os.replace(str(metadata_backup), str(self.final_metadata))
-            finally:
-                self.cleanup_temp()
-            raise
-        else:
-            if file_backup.exists():
-                file_backup.unlink()
-            if metadata_backup.exists():
-                shutil.rmtree(str(metadata_backup))
+        commit_output_pair(self.temp_output, self.final_output)
 
     def _install_parent_signal_handlers(self):
         if threading.current_thread() is not threading.main_thread():

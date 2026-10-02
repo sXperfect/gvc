@@ -1,6 +1,10 @@
 import subprocess
 import sys
 
+import pytest
+
+from gvc import app
+
 from gvc.__main__ import build_parser, main
 
 
@@ -28,3 +32,66 @@ def test_module_cli_help_runs_in_subprocess():
     )
     assert result.returncode == 0
     assert "usage:" in result.stdout.lower()
+
+
+
+def test_cli_decode_failure_preserves_existing_output(monkeypatch, tmp_path):
+    output = tmp_path / "decoded.txt"
+    output.write_text("OLD")
+
+    class FailingDecoder:
+        def __init__(self, input_fpath, output_fpath=None):
+            self.output_fpath = output_fpath
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def decode(self):
+            with open(self.output_fpath, "w") as handle:
+                handle.write("PARTIAL")
+            raise RuntimeError("synthetic decode failure")
+
+    monkeypatch.setattr(app, "Decoder", FailingDecoder)
+
+    with pytest.raises(RuntimeError, match="synthetic decode failure"):
+        app._run_decode_transaction(
+            "input.gvc",
+            str(output),
+            lambda decoder: decoder.decode(),
+        )
+
+    assert output.read_text() == "OLD"
+    assert not list(tmp_path.glob("decoded.txt.tmp.*"))
+
+
+def test_cli_decode_success_atomically_replaces_output(monkeypatch, tmp_path):
+    output = tmp_path / "decoded.txt"
+    output.write_text("OLD")
+
+    class SuccessfulDecoder:
+        def __init__(self, input_fpath, output_fpath=None):
+            self.output_fpath = output_fpath
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def decode(self):
+            with open(self.output_fpath, "w") as handle:
+                handle.write("NEW")
+
+    monkeypatch.setattr(app, "Decoder", SuccessfulDecoder)
+
+    app._run_decode_transaction(
+        "input.gvc",
+        str(output),
+        lambda decoder: decoder.decode(),
+    )
+
+    assert output.read_text() == "NEW"
+    assert not list(tmp_path.glob("decoded.txt.tmp.*"))

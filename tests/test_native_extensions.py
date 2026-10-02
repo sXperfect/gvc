@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from gvc import cdebinarize, cquery, debinarize
 from gvc.binarization import bin_row_bin_split
@@ -245,3 +246,69 @@ def test_ctypes_libgvc_rejects_duplicate_and_trailing_payload(monkeypatch):
     payload = RowColIds(permutation).to_bytes()
     with pytest.raises(ValueError, match="trailing"):
         libds.decode_rowcolids(payload + b"\x00", len(permutation))
+
+
+
+def test_python_genotype_text_supports_multi_digit_alleles():
+    from gvc import debinarize
+
+    allele_mat = np.array([[10, 11, 2, 12]], dtype=np.int8)
+    assert debinarize.recon_gt_mat_with_phase_val(
+        allele_mat.copy(), 0, 2
+    ) == "10|11\t2|12\n"
+
+
+def test_python_genotype_text_supports_multi_digit_mixed_phase():
+    from gvc import debinarize
+
+    allele_mat = np.array([[10, 11, 12, 13]], dtype=np.int8)
+    phase_mat = np.array([[0, 1]], dtype=np.uint8)
+    assert debinarize.recon_gt_mat_with_phase_mat(
+        allele_mat.copy(), phase_mat, 2
+    ) == "10|11\t12/13\n"
+
+
+def test_python_genotype_text_rejects_inconsistent_phase_shape():
+    from gvc import debinarize
+
+    allele_mat = np.array([[0, 1, 1, 0]], dtype=np.int8)
+    with pytest.raises(ValueError, match="phasing tensor shape"):
+        debinarize.simd_tensor_to_txt(
+            allele_mat.reshape(1, 2, 2),
+            np.zeros((1, 1, 1), dtype=np.uint8),
+        )
+
+
+
+def test_native_row_split_rejects_bit_length_above_uint8_width():
+    encoded = np.zeros((9, 1), dtype=bool)
+    with np.testing.assert_raises_regex(
+        ValueError, "must not exceed 8"
+    ):
+        cdebinarize.debin_rc_bin_split(
+            encoded, np.array([9], dtype=np.uint8)
+        )
+
+
+
+def test_cquery_rejects_uint32_expansion_overflow():
+    query = np.array([np.iinfo(np.uint32).max], dtype=np.uint32)
+    with np.testing.assert_raises_regex(
+        ValueError, "exceeds uint32 range"
+    ):
+        cquery.cget_col_ids(query, 2)
+
+
+
+def test_native_helpers_reject_ploidy_above_format_limit():
+    query = np.array([0], dtype=np.uint32)
+    with np.testing.assert_raises_regex(
+        ValueError, "serialized GVC limit"
+    ):
+        cquery.cget_col_ids(query, 257)
+
+    matrix = np.zeros((1, 257), dtype=np.int8)
+    with np.testing.assert_raises_regex(
+        ValueError, "serialized GVC limit"
+    ):
+        cdebinarize.recon_gt_mat_with_phase_val(matrix, 0, 257)
