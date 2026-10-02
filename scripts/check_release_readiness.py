@@ -35,6 +35,9 @@ REQUIRED_PATHS = (
     "tests/test_jbigkit.py",
     "tests/test_jbigkit_multiprocessing.py",
     "docs/development/platform-support.md",
+    "docs/audits/v1-file-format-compatibility.md",
+    "docs/README.md",
+    "CHANGELOG.md",
 )
 
 REQUIRED_WORKFLOW_SNIPPETS = (
@@ -90,6 +93,14 @@ def check_readiness(allow_dev=True):
         problems.append("historical LUH fixture is not pinned to reviewed commit")
     if "af45a419e46563906ac51fad0be869291316cea9" not in workflow:
         problems.append("historical LUH fixture blob identity is not checked")
+
+    release_workflow = (
+        ROOT / ".github" / "workflows" / "release-validation.yml"
+    ).read_text(encoding="utf-8")
+    if "workflow_dispatch:" not in release_workflow:
+        problems.append("release validation must remain manually dispatchable")
+    if "\n  push:" in release_workflow or "\n  pull_request:" in release_workflow:
+        problems.append("release validation must not run automatically on push/PR")
 
     platform_support = (
         ROOT / "docs" / "development" / "platform-support.md"
