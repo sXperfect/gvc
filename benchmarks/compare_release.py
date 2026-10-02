@@ -183,6 +183,10 @@ def main(argv=None):
         action="store_true",
         help="fail when fixture or benchmark host provenance differs",
     )
+    parser.add_argument(
+        "--output",
+        help="optional JSON file for machine-readable comparison results",
+    )
     args = parser.parse_args(argv)
 
     if (
@@ -199,6 +203,18 @@ def main(argv=None):
         )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
+
+    result["threshold_percent"] = args.max_regression_percent
+    result["require_same_configurations"] = bool(args.require_same_configurations)
+    result["require_compatible_environment"] = bool(args.require_compatible_environment)
+
+    if args.output:
+        output = Path(args.output)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(
+            json.dumps(result, indent=2, sort_keys=True, default=list) + "\n",
+            encoding="utf-8",
+        )
 
     for row in result["comparisons"]:
         print(_format_key(row["configuration"]))
