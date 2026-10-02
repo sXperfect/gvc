@@ -296,3 +296,18 @@ def test_cquery_rejects_uint32_expansion_overflow():
         ValueError, "exceeds uint32 range"
     ):
         cquery.cget_col_ids(query, 2)
+
+
+
+def test_native_helpers_reject_ploidy_above_format_limit():
+    query = np.array([0], dtype=np.uint32)
+    with np.testing.assert_raises_regex(
+        ValueError, "serialized GVC limit"
+    ):
+        cquery.cget_col_ids(query, 257)
+
+    matrix = np.zeros((1, 257), dtype=np.int8)
+    with np.testing.assert_raises_regex(
+        ValueError, "serialized GVC limit"
+    ):
+        cdebinarize.recon_gt_mat_with_phase_val(matrix, 0, 257)
