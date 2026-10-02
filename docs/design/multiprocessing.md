@@ -177,4 +177,6 @@ The maintained regression suite also verifies:
 - IPC cleanup attempts `cancel_join_thread()` and `close()` on every queue
   even if one queue raises during cleanup;
 - an actual parent SIGTERM in a subprocess tears down the child process and
-  leaves no final or temporary output.
+  leaves no final or temporary output;
+- if process startup fails after one or more children have already started,
+  the parent still cancels those children and removes temporary artifacts.
