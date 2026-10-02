@@ -127,3 +127,17 @@ def test_ci_all_includes_complete_automated_gate_sequence():
         "optional",
         "deps",
     ]
+
+
+def test_manual_release_workflow_separates_common_and_rc_artifacts():
+    workflow = (
+        ROOT / ".github" / "workflows" / "release-validation.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "Upload validation evidence" in workflow
+    assert "tmp/release-validation/benchmark.json" in workflow
+    assert "tmp/release-validation/evidence.json" in workflow
+    assert "Upload RC artifacts" in workflow
+    assert "if: ${{ inputs.rc_mode }}" in workflow
+    assert "tmp/release-validation/artifacts.json" in workflow
+    assert "tmp/release-validation/dist/*" in workflow
