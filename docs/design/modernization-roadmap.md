@@ -4,7 +4,8 @@
 
 - import the historical implementation with its BSD license;
 - establish GVC 1.x as Python >=3.8;
-- document that a higher Python floor requires a major release;
+- document release-line Python floors so a future minor line may raise the
+  minimum while 1.0.x remains available for Python 3.8;
 - replace legacy packaging metadata with pyproject.toml.
 
 ## Phase 2 — test foundation
@@ -28,17 +29,17 @@
 - compare Python and accelerated implementations;
 - add small benchmark/regression fixtures only after correctness gates are stable.
 
-## Phase 5 — stabilize GVC 1.x
+## Phase 5 — stabilize GVC 1.0.x
 
-- complete documentation and installation guidance;
-- establish a release branch when the first maintained 1.x release is cut;
-- keep Python 3.8 compatibility fixes isolated from future major-line work.
+- complete release documentation and installation guidance;
+- establish `release/1.0` when the maintained 1.0.x line is frozen;
+- retain Python >=3.8 and the v1 serialized format for all 1.0.x patches.
 
-## Phase 6 — future GVC 2.x
+## Phase 6 — future minor/major lines
 
-Only after the 1.x baseline is reproducible and audited:
+After the 1.0.x baseline is reproducible and audited:
 
-- choose a newer Python minimum;
-- modernize dependencies around that floor;
-- consider stronger typing/lint gates;
-- consider format/API changes that require a major version.
+- a future minor line may deliberately raise the Python minimum;
+- modernize dependencies around that new floor without rewriting 1.0.x history;
+- reserve major versions for breaking API, serialized-format, or codec changes;
+- consider stronger typing/lint gates independently of format compatibility.
