@@ -136,3 +136,11 @@ def test_v1_structural_corpus_rejects_every_truncation(name):
     for cut in range(len(data)):
         with pytest.raises((EOFError, ValueError, TypeError)):
             _parse(data[:cut])
+
+
+
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_v1_structural_corpus_rejects_trailing_bytes(name):
+    data = (FIXTURES / name).read_bytes()
+    with pytest.raises(ValueError, match="trailing bytes"):
+        _parse(data + b"\x00")
