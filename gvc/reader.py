@@ -65,7 +65,9 @@ class MetaHandler:
             return
         with open(self.header_fpath, "w") as f:
             f.write(self.vcf_f.raw_header.strip())
-        sample_ids = np.array(self.vcf_f.raw_header.strip().split("\n")[-1].split("\t")[9:])
+        sample_ids = np.asarray(self.vcf_f.samples)
+        if sample_ids.ndim != 1:
+            raise ValueError("VCF sample list must be one-dimensional")
         np.save(join(self.metadata_dpath, "samples"), sample_ids)
 
     def proc_var(self, i_var, variant):
