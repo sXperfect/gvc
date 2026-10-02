@@ -276,3 +276,14 @@ def test_python_genotype_text_rejects_inconsistent_phase_shape():
             allele_mat.reshape(1, 2, 2),
             np.zeros((1, 1, 1), dtype=np.uint8),
         )
+
+
+
+def test_native_row_split_rejects_bit_length_above_uint8_width():
+    encoded = np.zeros((9, 1), dtype=bool)
+    with np.testing.assert_raises_regex(
+        ValueError, "must not exceed 8"
+    ):
+        cdebinarize.debin_rc_bin_split(
+            encoded, np.array([9], dtype=np.uint8)
+        )
