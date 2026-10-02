@@ -427,3 +427,72 @@ def test_decoder_rejects_metadata_sample_count_mismatch(
     with pytest.raises(ValueError, match="metadata sample count"):
         decoder = Decoder(str(encoded))
         _close_decoder(decoder)
+
+
+
+def test_sequential_encode_failure_preserves_existing_output(
+    framed_test_codec,
+    monkeypatch,
+    tmp_path,
+):
+    from gvc import encoder as encoder_module
+
+    output = tmp_path / "sequential-existing.gvc"
+    output.write_bytes(b"OLD-GVC")
+    metadata = Path(str(output) + ".metadata")
+    metadata.mkdir()
+    (metadata / "marker").write_text("OLD-METADATA")
+
+    def failing_run_core(*args, **kwargs):
+        raise RuntimeError("synthetic sequential failure")
+
+    monkeypatch.setattr(encoder_module, "run_core", failing_run_core)
+
+    with pytest.raises(RuntimeError, match="synthetic sequential failure"):
+        Encoder(
+            str(VCF_FIXTURE),
+            str(output),
+            binarization_name="bit_plane",
+            axis=2,
+            sort_rows=False,
+            sort_cols=False,
+            block_size=2,
+            codec_name="jbig",
+            num_threads=0,
+        ).run()
+
+    assert output.read_bytes() == b"OLD-GVC"
+    assert (metadata / "marker").read_text() == "OLD-METADATA"
+    assert not list(tmp_path.glob("sequential-existing.gvc.tmp.*"))
+    assert not list(tmp_path.glob("sequential-existing.gvc.tmp.*.metadata"))
+
+
+def test_sequential_success_replaces_existing_output_without_backup_leaks(
+    framed_test_codec,
+    tmp_path,
+):
+    output = tmp_path / "sequential-replace.gvc"
+    output.write_bytes(b"OLD-GVC")
+    metadata = Path(str(output) + ".metadata")
+    metadata.mkdir()
+    (metadata / "marker").write_text("OLD-METADATA")
+
+    Encoder(
+        str(VCF_FIXTURE),
+        str(output),
+        binarization_name="bit_plane",
+        axis=2,
+        sort_rows=False,
+        sort_cols=False,
+        block_size=2,
+        codec_name="jbig",
+        num_threads=0,
+    ).run()
+
+    assert output.read_bytes() != b"OLD-GVC"
+    assert not (metadata / "marker").exists()
+    assert (metadata / "main.npy").is_file()
+    assert (metadata / "samples.npy").is_file()
+    assert not list(tmp_path.glob("sequential-replace.gvc.gvc-backup-*"))
+    assert not list(tmp_path.glob("sequential-replace.gvc.metadata.gvc-backup-*"))
+    assert not list(tmp_path.glob("sequential-replace.gvc.tmp.*"))
