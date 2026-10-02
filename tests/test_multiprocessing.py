@@ -776,6 +776,7 @@ def test_real_parent_sigterm_cleans_child_processes_and_temp_artifacts(tmp_path)
     import subprocess
     import sys
     import textwrap
+    from pathlib import Path
 
     marker = tmp_path / "child.pid"
     temp_output = tmp_path / "signal-integration.tmp"
