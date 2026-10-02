@@ -89,3 +89,20 @@ def test_complete_v1_fixture_rejects_declared_access_unit_length_mismatch():
 def test_complete_v1_fixture_rejects_trailing_bytes():
     with pytest.raises(ValueError, match="trailing bytes"):
         _parse_structural_v1(FIXTURE.read_bytes() + b"\x00")
+
+
+
+def test_complete_v1_fixture_rejects_missing_parameter_set_reference():
+    data = bytearray(FIXTURE.read_bytes())
+    # Access-unit parameter_set_id follows type, total length, and access_unit_id.
+    data[19] = 7
+    with pytest.raises(ValueError, match="missing parameter set 7"):
+        _parse_structural_v1(data)
+
+
+def test_complete_v1_fixture_rejects_access_unit_shorter_than_fixed_header():
+    data = bytearray(FIXTURE.read_bytes())
+    # Access unit begins at byte 10. Its 4-byte total length begins at byte 11.
+    data[11:15] = (10).to_bytes(4, "big")
+    with pytest.raises(ValueError, match="smaller than its header"):
+        _parse_structural_v1(data)
