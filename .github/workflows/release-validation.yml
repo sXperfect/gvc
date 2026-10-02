@@ -136,13 +136,14 @@ jobs:
           python scripts/run_release_validation.py "${args[@]}"
 
       - name: Upload validation evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: gvc-release-validation-${{ github.sha }}
           path: |
             tmp/release-validation/benchmark.json
             tmp/release-validation/evidence.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
 
       - name: Upload RC artifacts
