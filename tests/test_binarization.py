@@ -190,3 +190,36 @@ def test_debin_bit_plane_rejects_depth_beyond_uint8():
 
     with pytest.raises(ValueError, match="exceeds uint8"):
         binarization.debin_bit_plane([plane] * 9, bit_depth=9, axis=2)
+
+
+
+def test_split_genotype_matrix_handles_multi_digit_alleles():
+    allele_matrix, phase_matrix, ploidy = binarization.split_genotype_matrix(
+        ["10|11\t2/12\n"]
+    )
+
+    assert ploidy == 2
+    np.testing.assert_array_equal(
+        allele_matrix,
+        np.array([[10, 11, 2, 12]], dtype=np.int8),
+    )
+    np.testing.assert_array_equal(
+        phase_matrix,
+        np.array([[0, 1]], dtype=bool),
+    )
+
+
+def test_split_genotype_matrix_handles_mixed_ploidy_by_padding():
+    allele_matrix, phase_matrix, ploidy = binarization.split_genotype_matrix(
+        ["1\t2|3\n"]
+    )
+
+    assert ploidy == 2
+    np.testing.assert_array_equal(
+        allele_matrix,
+        np.array([[1, -2, 2, 3]], dtype=np.int8),
+    )
+    np.testing.assert_array_equal(
+        phase_matrix,
+        np.array([[0, 0]], dtype=bool),
+    )
