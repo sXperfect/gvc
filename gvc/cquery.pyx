@@ -14,6 +14,8 @@ def cget_col_ids(
 ):
     if p <= 0:
         raise ValueError("ploidy must be greater than zero")
+    if p > 256:
+        raise ValueError("ploidy exceeds serialized GVC limit of 256")
     if len(qci):
         max_sample = int(np.max(qci))
         max_uint32 = int(np.iinfo(np.uint32).max)
