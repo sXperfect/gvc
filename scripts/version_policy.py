@@ -3,7 +3,7 @@
 import re
 
 DEV_RE = re.compile(r"^1\.0\.(\d+)\.dev(\d+)$")
-RC_RE = re.compile(r"^1\.0\.(\d+)rc(\d+)$")
+RC_RE = re.compile(r"^1\.0\.(\d+)rc([1-9]\d*)$")
 FINAL_RE = re.compile(r"^1\.0\.(\d+)$")
 
 
