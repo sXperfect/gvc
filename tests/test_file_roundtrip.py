@@ -517,3 +517,26 @@ def test_decoder_context_manager_closes_owned_files(
     assert output_handle.closed
     assert decoder._f is None
     assert decoder._out_f is None
+
+
+
+def test_compare_handles_ploidy_induced_block_boundaries(
+    framed_test_codec,
+    tmp_path,
+):
+    encoded = tmp_path / "compare-mixed.gvc"
+
+    Encoder(
+        str(MIXED_PLOIDY_FIXTURE),
+        str(encoded),
+        binarization_name="bit_plane",
+        axis=2,
+        sort_rows=False,
+        sort_cols=False,
+        block_size=4,
+        codec_name="jbig",
+        num_threads=0,
+    ).run()
+
+    with Decoder(str(encoded)) as decoder:
+        decoder.compare(str(MIXED_PLOIDY_FIXTURE))
