@@ -142,3 +142,40 @@ def test_rc_validation_requires_sorting_coverage(tmp_path):
             ]
         )
     assert exc_info.value.code == 2
+
+
+def test_release_validation_persists_failure_evidence(monkeypatch, tmp_path):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"fixture")
+    benchmark = tmp_path / "benchmark.json"
+    evidence = tmp_path / "evidence.json"
+
+    def fake_run(command, env=None):
+        if "scripts/verify_historical.py" in command:
+            raise RuntimeError("synthetic historical failure")
+
+    monkeypatch.setattr(run_release_validation, "_run", fake_run)
+
+    with pytest.raises(RuntimeError, match="synthetic historical failure"):
+        run_release_validation.main(
+            [
+                str(fixture),
+                "--benchmark-output",
+                str(benchmark),
+                "--evidence-output",
+                str(evidence),
+                "--workers",
+                "0",
+                "--repetitions",
+                "1",
+                "--historical-max-blocks",
+                "1",
+            ]
+        )
+
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    assert payload["status"] == "fail"
+    assert payload["steps"][-1]["name"] == "historical_fixture"
+    assert payload["steps"][-1]["status"] == "fail"
+    assert "synthetic historical failure" in payload["steps"][-1]["error"]
+    assert payload["completed_unix"] >= payload["created_unix"]
