@@ -59,3 +59,41 @@ def test_compare_release_rejects_duplicate_configuration():
             _report([_config(2), _config(2)]),
             _report([_config(2)]),
         )
+
+
+def test_compare_release_reports_fixture_provenance_mismatch():
+    baseline = _report([_config(2)])
+    candidate = _report([_config(2)])
+    baseline["fixture_sha256"] = "a" * 64
+    candidate["fixture_sha256"] = "b" * 64
+    baseline["host"] = {
+        "platform": "linux",
+        "machine": "x86_64",
+        "processor": "cpu",
+        "python": "3.8.20",
+        "cpu_count": 8,
+    }
+    candidate["host"] = dict(baseline["host"])
+
+    result = compare_reports(baseline, candidate)
+
+    assert result["provenance_mismatches"] == ["fixture_sha256"]
+
+
+def test_compare_release_reports_host_provenance_mismatch():
+    baseline = _report([_config(2)])
+    candidate = _report([_config(2)])
+    baseline["fixture_sha256"] = candidate["fixture_sha256"] = "a" * 64
+    baseline["host"] = {
+        "platform": "linux",
+        "machine": "x86_64",
+        "processor": "cpu-a",
+        "python": "3.8.20",
+        "cpu_count": 8,
+    }
+    candidate["host"] = dict(baseline["host"])
+    candidate["host"]["cpu_count"] = 16
+
+    result = compare_reports(baseline, candidate)
+
+    assert result["provenance_mismatches"] == ["host.cpu_count"]
