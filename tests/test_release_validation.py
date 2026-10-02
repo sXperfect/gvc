@@ -187,6 +187,11 @@ def test_rc_artifact_failure_persists_evidence(monkeypatch, tmp_path):
     evidence = tmp_path / "evidence.json"
 
     monkeypatch.setattr(run_release_validation, "_git_dirty", lambda: False)
+    monkeypatch.setattr(
+        run_release_validation,
+        "_git_blob",
+        lambda path: run_release_validation.HISTORICAL_FIXTURE_GIT_BLOB,
+    )
     monkeypatch.setattr(run_release_validation, "_package_version", lambda: "1.0.1rc1")
 
     def fake_run(command, env=None):
@@ -247,6 +252,11 @@ def test_rc_dirty_worktree_persists_failure_evidence(monkeypatch, tmp_path):
     evidence = tmp_path / "evidence.json"
 
     monkeypatch.setattr(run_release_validation, "_git_dirty", lambda: True)
+    monkeypatch.setattr(
+        run_release_validation,
+        "_git_blob",
+        lambda path: run_release_validation.HISTORICAL_FIXTURE_GIT_BLOB,
+    )
     monkeypatch.setattr(run_release_validation, "_package_version", lambda: "1.0.1rc1")
 
     with pytest.raises(RuntimeError, match="clean git worktree"):
@@ -331,3 +341,37 @@ def test_release_validation_requires_complete_metric_comparison(
     ]
     assert len(compare_commands) == 1
     assert "--require-complete-metrics" in compare_commands[0]
+
+
+
+def test_rc_validation_rejects_wrong_historical_fixture_identity(
+    monkeypatch,
+    tmp_path,
+):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"wrong fixture")
+    evidence = tmp_path / "evidence.json"
+
+    monkeypatch.setattr(run_release_validation, "_git_dirty", lambda: False)
+    monkeypatch.setattr(run_release_validation, "_package_version", lambda: "1.0.1rc1")
+    monkeypatch.setattr(run_release_validation, "_git_blob", lambda path: "0" * 40)
+
+    with pytest.raises(RuntimeError, match="fixture identity mismatch"):
+        run_release_validation.main(
+            [
+                str(fixture),
+                "--benchmark-output",
+                str(tmp_path / "benchmark.json"),
+                "--evidence-output",
+                str(evidence),
+                "--rc",
+                "--historical-max-blocks",
+                "0",
+                "--include-sorting",
+            ]
+        )
+
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    assert payload["status"] == "fail"
+    assert payload["steps"][-1]["name"] == "historical_fixture_identity"
+    assert payload["steps"][-1]["actual_git_blob"] == "0" * 40
