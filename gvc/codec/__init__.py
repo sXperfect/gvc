@@ -18,6 +18,15 @@ MAT_CODECS = {
 AVAIL_CODECS = [v['name'] for v in MAT_CODECS.values()]
 CODEC_STR2ID = {v["name"]:k for k, v in MAT_CODECS.items()}
 
+
+def _codec_entry(coder_id):
+    try:
+        return MAT_CODECS[coder_id]
+    except KeyError as exc:
+        raise ValueError(
+            "unsupported codec id: {}".format(int(coder_id))
+        ) from exc
+
 def decode_permutation(payload, num_entries):
     permutation = RowColIds.from_bytes(payload, num_entries).ids
     return permutation
@@ -79,7 +88,7 @@ def encode(
 
         log.info('Encode matrix number {}'.format(i))
         encoder_id = param_set.variants_coder_ids[i]
-        encoder_f = MAT_CODECS[encoder_id]["encoder"]
+        encoder_f = _codec_entry(encoder_id)["encoder"]
         matrix_bytes = encoder_f(matrix)
 
         sorted_allele_mat_payloads.append(matrix_bytes)
@@ -113,7 +122,7 @@ def encode(
 
     if param_set.encode_phase_data:
         encoder_id = param_set.phase_coder_ids
-        encoder_f = MAT_CODECS[encoder_id]["encoder"]
+        encoder_f = _codec_entry(encoder_id)["encoder"]
         sorted_phase_mat_payload = encoder_f(sorted_phase_mat)
 
         if param_set.sort_phases_row_flag:
@@ -147,7 +156,7 @@ def decode(
     except AttributeError:
         pass
 
-    decode_f = MAT_CODECS[coder_id]["decoder"]
+    decode_f = _codec_entry(coder_id)["decoder"]
     bin_mat = decode_f(bin_mat_payload)
     nrows, ncols = bin_mat.shape
     
