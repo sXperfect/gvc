@@ -20,9 +20,12 @@ We kindly ask to refrain from publishing analyses that were conducted using this
 ---
 
 GVC 1.0.x supports Python 3.8 or newer. CMake and a C/C++ compiler are
-required for the native components. Future minor release lines may raise the
-minimum Python version; older release lines remain available for legacy Python
-environments. See [docs/design/versioning.md](docs/design/versioning.md).
+required for the native components. The validated 1.0.x release platform is
+Linux; macOS and Windows are currently best-effort and are not release-gated
+until dedicated platform validation is added. Future minor release lines may
+raise the minimum Python version; older release lines remain available for
+legacy Python environments. See [docs/design/versioning.md](docs/design/versioning.md)
+and [docs/development/platform-support.md](docs/development/platform-support.md).
 For anaconda or conda user, CMAKE, gcc and gxx libraries are required and can be installed through: `conda install -c conda-forge cmake gxx_linux-64 gcc_linux-64`.
 The core numerical dependencies are declared in `pyproject.toml`. Install
 optional integrations explicitly:
