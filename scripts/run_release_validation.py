@@ -164,6 +164,10 @@ def main(argv=None):
         parser.error("--max-regression-percent must be non-negative")
     if args.max_regression_percent is not None and baseline is None:
         parser.error("--max-regression-percent requires --baseline")
+    if args.rc and args.historical_max_blocks != 0:
+        parser.error("--rc requires --historical-max-blocks 0 for the full fixture")
+    if args.rc and not args.include_sorting:
+        parser.error("--rc requires --include-sorting")
 
     evidence = {
         "schema_version": 2,
