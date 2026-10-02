@@ -34,6 +34,11 @@ REQUIRED_WORKFLOW_SNIPPETS = (
     'python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]',
     "fail-fast: false",
     "Run compatibility checks",
+    'GVC_REQUIRE_JBIGKIT=1',
+    'GVC_HISTORICAL_FIXTURE="$PWD/tmp/historical/test_block01.vcf.gz"',
+    'GVC_HISTORICAL_MAX_BLOCKS=1',
+    "benchmarks/run_release.py",
+    "tmp/benchmark-smoke.json",
 )
 
 
