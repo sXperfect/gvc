@@ -25,14 +25,15 @@ class Index:
             raise ValueError("sample index must be one-dimensional")
         if len(set(self.samples.tolist())) != len(self.samples):
             raise ValueError("sample index contains duplicate sample IDs")
+        encoded_sample_count = getattr(decoder_context, "ncols", None)
         if (
-            decoder_context.ncols is not None
-            and len(self.samples) != decoder_context.ncols
+            encoded_sample_count is not None
+            and len(self.samples) != encoded_sample_count
         ):
             raise ValueError(
                 "metadata sample count does not match encoded data: "
                 "expected {}, got {}".format(
-                    decoder_context.ncols,
+                    encoded_sample_count,
                     len(self.samples),
                 )
             )
