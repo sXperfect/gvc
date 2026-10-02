@@ -2,6 +2,7 @@
 """Create reproducible GVC release benchmark reports."""
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -14,6 +15,32 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKER = ROOT / "benchmarks" / "_release_worker.py"
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _package_version():
+    namespace = {}
+    exec((ROOT / "gvc" / "_version.py").read_text(encoding="utf-8"), namespace)
+    return namespace["__version__"]
+
+
+def _git_commit():
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(ROOT),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=True,
+    )
+    return completed.stdout.strip()
 
 
 def _run_configuration(args, workers):
@@ -113,9 +140,15 @@ def main(argv=None):
         "created_unix": time.time(),
         "fixture": os.path.abspath(args.fixture),
         "fixture_bytes": os.path.getsize(args.fixture),
+        "fixture_sha256": _sha256(args.fixture),
+        "commit": _git_commit(),
+        "package_version": _package_version(),
         "host": {
             "platform": platform.platform(),
+            "machine": platform.machine(),
+            "processor": platform.processor(),
             "python": platform.python_version(),
+            "python_executable": sys.executable,
             "cpu_count": os.cpu_count(),
         },
         "configurations": [
