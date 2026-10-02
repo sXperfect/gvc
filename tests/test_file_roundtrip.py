@@ -362,3 +362,52 @@ def test_random_access_requires_metadata(framed_test_codec, tmp_path):
             decoder.random_access([100, 100], None)
     finally:
         _close_decoder(decoder)
+
+
+
+def test_decoder_rejects_duplicate_parameter_set_id(framed_test_codec, tmp_path):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "duplicate-parameter-set"
+    )
+    raw = encoded.read_bytes()
+    first_len = int.from_bytes(raw[1:5], "big")
+    duplicated = raw[:first_len] + raw
+    damaged = tmp_path / "duplicate-parameter-set.gvc"
+    damaged.write_bytes(duplicated)
+
+    with pytest.raises(ValueError, match="duplicate parameter_set_id"):
+        decoder = Decoder(str(damaged))
+        _close_decoder(decoder)
+
+
+def test_decoder_rejects_duplicate_access_unit_id(framed_test_codec, tmp_path):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "duplicate-access-unit-source"
+    )
+    raw = encoded.read_bytes()
+    parameter_len = int.from_bytes(raw[1:5], "big")
+    access_start = parameter_len
+    access_len = int.from_bytes(raw[access_start + 1:access_start + 5], "big")
+    access_unit = raw[access_start:access_start + access_len]
+    damaged = tmp_path / "duplicate-access-unit.gvc"
+    damaged.write_bytes(
+        raw[:access_start + access_len]
+        + access_unit
+        + raw[access_start + access_len:]
+    )
+
+    with pytest.raises(ValueError, match="duplicate access_unit_id"):
+        decoder = Decoder(str(damaged))
+        _close_decoder(decoder)
+
+
+def test_decoder_rejects_incomplete_metadata_sidecar(framed_test_codec, tmp_path):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "incomplete-metadata"
+    )
+    metadata = Path(str(encoded) + ".metadata")
+    (metadata / "main.npy").unlink()
+
+    with pytest.raises(FileNotFoundError):
+        decoder = Decoder(str(encoded))
+        _close_decoder(decoder)
