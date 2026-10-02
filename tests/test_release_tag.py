@@ -93,3 +93,10 @@ def test_forbidden_version_promotions(current, target):
     policy = MODULE._load_version_policy()
     with pytest.raises(ValueError):
         policy.validate_transition(current, target)
+
+
+
+def test_zero_numbered_rc_is_invalid():
+    policy = MODULE._load_version_policy()
+    assert policy.classify_version("1.0.1rc0") == "invalid"
+    assert policy.is_taggable("1.0.1rc0") is False
