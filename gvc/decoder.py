@@ -652,9 +652,9 @@ class Decoder(object):
                         block.block_payload,
                     )
                 
-                try:
+                if self._out_f is not None:
                     self._out_f.write(out)
-                except AttributeError:
+                else:
                     print(out)
 
                 log.info("Decoding time:{:.3f}".format(t.time))
