@@ -141,3 +141,13 @@ def test_manual_release_workflow_separates_common_and_rc_artifacts():
     assert "if: ${{ inputs.rc_mode }}" in workflow
     assert "tmp/release-validation/artifacts.json" in workflow
     assert "tmp/release-validation/dist/*" in workflow
+
+
+def test_manual_release_workflow_uploads_failure_evidence():
+    workflow = (
+        ROOT / ".github" / "workflows" / "release-validation.yml"
+    ).read_text(encoding="utf-8")
+
+    section = workflow.split("- name: Upload validation evidence", 1)[1]
+    assert "if: ${{ always() }}" in section
+    assert "if-no-files-found: warn" in section
