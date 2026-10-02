@@ -170,3 +170,23 @@ def test_matrix_to_tensor_rejects_invalid_grouping():
 def test_split_genotype_matrix_rejects_allele_above_int8_range():
     with pytest.raises(ValueError, match="supported range"):
         binarization.split_genotype_matrix(["128|0\n"])
+
+
+
+@pytest.mark.parametrize(
+    "matrix",
+    [
+        np.array([[300]], dtype=np.int16),
+        np.array([[-3]], dtype=np.int16),
+    ],
+)
+def test_adaptive_max_value_rejects_out_of_range_alleles(matrix):
+    with pytest.raises(ValueError, match="within -2"):
+        binarization.adaptive_max_value(matrix)
+
+
+def test_debin_bit_plane_rejects_depth_beyond_uint8():
+    plane = np.zeros((1, 1), dtype=bool)
+
+    with pytest.raises(ValueError, match="exceeds uint8"):
+        binarization.debin_bit_plane([plane] * 9, bit_depth=9, axis=2)
