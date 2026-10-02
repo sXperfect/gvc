@@ -490,18 +490,44 @@ class Decoder(object):
 
         self.input_fpath = input_fpath
         self.output_fpath = output_fpath
-        self._f = open(self.input_fpath, 'rb')
-        self._bitstream_reader = gvc.bitstream.BitstreamReader(self._f)
-
+        self._f = None
+        self._out_f = None
+        self._bitstream_reader = None
         self.decoder_context = DecoderContext()
-        self._cache_data()
+        self.index = None
 
-        self.index = ds.Index.from_gvc_fpath(input_fpath, self.decoder_context)
-        
-        if output_fpath is not None:
-            self._out_f = open(self.output_fpath, 'w')
-        else:
-            self._out_f = None
+        try:
+            self._f = open(self.input_fpath, 'rb')
+            self._bitstream_reader = gvc.bitstream.BitstreamReader(self._f)
+            self._cache_data()
+            self.index = ds.Index.from_gvc_fpath(
+                input_fpath, self.decoder_context
+            )
+
+            if output_fpath is not None:
+                self._out_f = open(self.output_fpath, 'w')
+        except BaseException:
+            self.close()
+            raise
+
+    def close(self):
+        if self._out_f is not None:
+            try:
+                self._out_f.close()
+            finally:
+                self._out_f = None
+        if self._f is not None:
+            try:
+                self._f.close()
+            finally:
+                self._f = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+        return False
 
     def _decode_parameter_set(self):
         log.info('decoding parameter set')
