@@ -292,6 +292,11 @@ def adaptive_max_value(allele_matrix):
         raise ValueError("allele matrix must not be empty")
     if not np.issubdtype(allele_matrix.dtype, np.signedinteger):
         raise TypeError("allele matrix must use a signed integer dtype")
+    signed_info = np.iinfo(gvc.common.SIGNED_ALLELE_DTYPE)
+    if np.any(allele_matrix < -2) or np.any(allele_matrix > signed_info.max):
+        raise ValueError(
+            "allele values must be within -2..{}".format(signed_info.max)
+        )
     allele_matrix = allele_matrix.copy()
 
     dot_mask = allele_matrix == -1
@@ -515,6 +520,8 @@ def debin_bit_plane(bin_matrices, bit_depth, axis):
         or bit_depth <= 0
     ):
         raise ValueError("bit_depth must be a positive integer")
+    if bit_depth > np.iinfo(gvc.common.ALLELE_DTYPE).bits:
+        raise ValueError("bit_depth exceeds uint8 allele representation")
     if axis not in (0, 1, 2):
         raise ValueError("bit-plane axis must be 0, 1, or 2")
 
