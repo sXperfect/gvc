@@ -6,6 +6,7 @@ from __future__ import print_function
 import argparse
 import compileall
 import importlib.metadata as metadata
+import importlib.util
 import os
 import re
 import shutil
@@ -42,6 +43,14 @@ DEPENDENCIES = (
 def run(cmd):
     print("$ " + " ".join(str(x) for x in cmd), flush=True)
     return subprocess.call([str(x) for x in cmd], cwd=str(ROOT))
+
+
+def _load_release_artifact_checker():
+    path = ROOT / "scripts" / "check_release_artifacts.py"
+    spec = importlib.util.spec_from_file_location("gvc_check_release_artifacts", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _package_version_for_ci():
@@ -234,7 +243,7 @@ def packaging_gate():
         return 2
 
     try:
-        check_release_artifacts.inspect_artifacts(
+        _load_release_artifact_checker().inspect_artifacts(
             wheels[0],
             sdists[0],
             _package_version_for_ci(),
