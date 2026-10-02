@@ -179,3 +179,40 @@ def test_release_validation_persists_failure_evidence(monkeypatch, tmp_path):
     assert payload["steps"][-1]["status"] == "fail"
     assert "synthetic historical failure" in payload["steps"][-1]["error"]
     assert payload["completed_unix"] >= payload["created_unix"]
+
+
+def test_rc_artifact_failure_persists_evidence(monkeypatch, tmp_path):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"fixture")
+    evidence = tmp_path / "evidence.json"
+
+    monkeypatch.setattr(run_release_validation, "_git_dirty", lambda: False)
+    monkeypatch.setattr(run_release_validation, "_package_version", lambda: "1.0.1rc1")
+
+    def fake_run(command, env=None):
+        if "-m" in command and "build" in command:
+            raise RuntimeError("synthetic artifact build failure")
+
+    monkeypatch.setattr(run_release_validation, "_run", fake_run)
+
+    with pytest.raises(RuntimeError, match="synthetic artifact build failure"):
+        run_release_validation.main(
+            [
+                str(fixture),
+                "--benchmark-output",
+                str(tmp_path / "benchmark.json"),
+                "--evidence-output",
+                str(evidence),
+                "--rc",
+                "--historical-max-blocks",
+                "0",
+                "--include-sorting",
+            ]
+        )
+
+    payload = json.loads(evidence.read_text(encoding="utf-8"))
+    assert payload["status"] == "fail"
+    assert payload["steps"][-1]["name"] == "release_artifacts"
+    assert payload["steps"][-1]["status"] == "fail"
+    assert payload["steps"][-1]["version"] == "1.0.1rc1"
+    assert "synthetic artifact build failure" in payload["steps"][-1]["error"]
