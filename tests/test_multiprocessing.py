@@ -635,3 +635,91 @@ def test_supervisor_run_restores_signal_handler_after_failure(monkeypatch, tmp_p
         supervisor.run()
 
     assert restored == [{15: "previous"}]
+
+
+def test_queue_put_stops_under_backpressure_when_cancelled():
+    from gvc.encoder import _queue_put
+
+    class FullQueue:
+        def __init__(self, stop_event):
+            self.calls = 0
+            self.stop_event = stop_event
+
+        def put(self, item, timeout=None):
+            import queue as local_queue
+            self.calls += 1
+            self.stop_event.set()
+            raise local_queue.Full
+
+    stop = DummyEvent()
+    target = FullQueue(stop)
+
+    assert _queue_put(target, object(), stop, timeout=0.01) is False
+    assert target.calls == 1
+
+
+def test_queue_get_stops_when_cancelled_after_empty_poll():
+    from gvc.encoder import _queue_get
+
+    class EmptyQueue:
+        def __init__(self, stop_event):
+            self.calls = 0
+            self.stop_event = stop_event
+
+        def get(self, timeout=None):
+            import queue as local_queue
+            self.calls += 1
+            self.stop_event.set()
+            raise local_queue.Empty
+
+    stop = DummyEvent()
+    source = EmptyQueue(stop)
+
+    assert _queue_get(source, stop, timeout=0.01) is None
+    assert source.calls == 1
+
+
+def test_supervisor_cancel_escalates_to_terminate_and_kill(tmp_path):
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    class FakeProcess:
+        def __init__(self):
+            self.pid = 1234
+            self.alive = True
+            self.join_calls = []
+            self.terminate_calls = 0
+            self.kill_calls = 0
+
+        def join(self, timeout=None):
+            self.join_calls.append(timeout)
+
+        def is_alive(self):
+            return self.alive
+
+        def terminate(self):
+            self.terminate_calls += 1
+
+        def kill(self):
+            self.kill_calls += 1
+            self.alive = False
+
+    proc = FakeProcess()
+    stop = DummyEvent()
+    supervisor = EncodeProcessSupervisor(
+        processes=[proc],
+        error_q=Queue(),
+        status_q=Queue(),
+        stop_event=stop,
+        queues=[],
+        temp_output=tmp_path / "cancel.tmp",
+        final_output=tmp_path / "cancel.gvc",
+        graceful_timeout=0,
+    )
+
+    supervisor.cancel()
+
+    assert stop.is_set()
+    assert proc.terminate_calls == 1
+    assert proc.kill_calls == 1
+    assert proc.alive is False
+    assert len(proc.join_calls) >= 2
