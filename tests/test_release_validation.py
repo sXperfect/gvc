@@ -105,3 +105,40 @@ def test_release_validation_writes_machine_readable_evidence(monkeypatch, tmp_pa
     assert any("scripts/check_release_readiness.py" in command for command in commands)
     assert any("scripts/verify_historical.py" in command for command in commands)
     assert any("benchmarks/run_release.py" in command for command in commands)
+
+
+def test_rc_validation_requires_full_historical_fixture(tmp_path):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"x")
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_release_validation.main(
+            [
+                str(fixture),
+                "--benchmark-output",
+                str(tmp_path / "benchmark.json"),
+                "--rc",
+                "--historical-max-blocks",
+                "1",
+                "--include-sorting",
+            ]
+        )
+    assert exc_info.value.code == 2
+
+
+def test_rc_validation_requires_sorting_coverage(tmp_path):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"x")
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_release_validation.main(
+            [
+                str(fixture),
+                "--benchmark-output",
+                str(tmp_path / "benchmark.json"),
+                "--rc",
+                "--historical-max-blocks",
+                "0",
+            ]
+        )
+    assert exc_info.value.code == 2
