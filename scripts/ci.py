@@ -14,6 +14,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from scripts import check_release_artifacts
+
 ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = ROOT / "pyproject.toml"
 VERSION_FILE = ROOT / "gvc" / "_version.py"
@@ -21,6 +23,9 @@ CMAKE_SOURCE = ROOT / "library" / "libgvc" / "src"
 CMAKE_BUILD = ROOT / "tmp" / "libgvc-build"
 DIST_DIR = ROOT / "tmp" / "dist"
 PACKAGE_VENV_ROOT = ROOT / "tmp" / "package-venvs"
+
+import tarfile
+import zipfile
 
 DEPENDENCIES = (
     "numpy",
@@ -37,6 +42,12 @@ DEPENDENCIES = (
 def run(cmd):
     print("$ " + " ".join(str(x) for x in cmd), flush=True)
     return subprocess.call([str(x) for x in cmd], cwd=str(ROOT))
+
+
+def _package_version_for_ci():
+    namespace = {}
+    exec(VERSION_FILE.read_text(encoding="utf-8"), namespace)
+    return namespace["__version__"]
 
 
 def metadata_gate():
@@ -220,6 +231,16 @@ def packaging_gate():
             ),
             file=sys.stderr,
         )
+        return 2
+
+    try:
+        check_release_artifacts.inspect_artifacts(
+            wheels[0],
+            sdists[0],
+            _package_version_for_ci(),
+        )
+    except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError) as exc:
+        print("artifact inspection failed: {}".format(exc), file=sys.stderr)
         return 2
 
     status = _install_and_smoke_artifact(wheels[0], "wheel")
