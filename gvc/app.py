@@ -111,12 +111,41 @@ The coding of a genotype matrix G comprises the following steps:
    matrix P
 """
 
+import os
 import sys
+import uuid
 import logging as log
 
 from .encoder import Encoder
 from .decoder import Decoder
 from .settings import PROGRAM_NAME, PROGRAM_DESC, LOG_LEVELS
+
+
+def _temporary_decode_output(output_fpath):
+    return "{}.tmp.{}.{}".format(
+        output_fpath,
+        os.getpid(),
+        uuid.uuid4().hex,
+    )
+
+
+def _run_decode_transaction(input_fpath, output_fpath, action):
+    if output_fpath is None:
+        with Decoder(input_fpath, None) as decoder:
+            return action(decoder)
+
+    temp_output = _temporary_decode_output(output_fpath)
+    try:
+        with Decoder(input_fpath, temp_output) as decoder:
+            result = action(decoder)
+        os.replace(temp_output, output_fpath)
+        return result
+    except BaseException:
+        try:
+            os.unlink(temp_output)
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def run(args, run_as_module: bool):
@@ -149,14 +178,21 @@ def run(args, run_as_module: bool):
         log.debug('  %-16s: %s', arg, getattr(args, arg))
 
     if args.mode == "decode":
-        with Decoder(args.input, args.output) as decoder:
-            if args.pos is None and args.samples is None:
-                decoder.decode()
-            else:
-                decoder.random_access(
+        if args.pos is None and args.samples is None:
+            _run_decode_transaction(
+                args.input,
+                args.output,
+                lambda decoder: decoder.decode(),
+            )
+        else:
+            _run_decode_transaction(
+                args.input,
+                args.output,
+                lambda decoder: decoder.random_access(
                     args.pos,
-                    args.samples
-                )
+                    args.samples,
+                ),
+            )
 
     elif args.mode == "compare":
         with Decoder(args.input, None) as decoder:
