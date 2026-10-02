@@ -97,3 +97,22 @@ def test_compare_release_reports_host_provenance_mismatch():
     result = compare_reports(baseline, candidate)
 
     assert result["provenance_mismatches"] == ["host.cpu_count"]
+
+
+def test_compare_release_reports_missing_provenance():
+    baseline = _report([_config(2)])
+    candidate = _report([_config(2)])
+    candidate["fixture_sha256"] = "a" * 64
+    candidate["host"] = {
+        "platform": "linux",
+        "machine": "x86_64",
+        "processor": "cpu",
+        "python": "3.8.20",
+        "cpu_count": 8,
+    }
+
+    result = compare_reports(baseline, candidate)
+
+    assert "fixture_sha256" in result["baseline_missing_provenance"]
+    assert "host.platform" in result["baseline_missing_provenance"]
+    assert result["candidate_missing_provenance"] == []
