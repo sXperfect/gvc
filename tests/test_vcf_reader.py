@@ -158,6 +158,7 @@ def test_metadata_end_writes_empty_root_index(tmp_path):
             "##fileformat=VCFv4.2\n"
             "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE_A"
         )
+        samples = ["SAMPLE_A"]
 
     metadata = tmp_path / "empty.gvc.metadata"
     handler = reader.MetaHandler(FakeVCF(), str(metadata), block_size=4)
@@ -200,3 +201,22 @@ def test_vcf_reader_rejects_allele_index_that_overflows_working_dtype(monkeypatc
 
     with pytest.raises(ValueError, match="outside the supported range"):
         list(reader.vcf_genotypes_reader("synthetic.vcf", None, block_size=1))
+
+
+
+def test_metadata_samples_use_authoritative_vcf_sample_list(tmp_path):
+    class FakeVCF:
+        raw_header = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tWRONG"
+        )
+        samples = ["SAMPLE_A", "SAMPLE_B"]
+
+    metadata = tmp_path / "samples.gvc.metadata"
+    handler = reader.MetaHandler(FakeVCF(), str(metadata), block_size=4)
+    handler.init()
+
+    np.testing.assert_array_equal(
+        np.load(metadata / "samples.npy", allow_pickle=False),
+        np.array(["SAMPLE_A", "SAMPLE_B"]),
+    )
