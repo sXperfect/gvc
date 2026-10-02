@@ -116,3 +116,54 @@ def test_compare_release_reports_missing_provenance():
     assert "fixture_sha256" in result["baseline_missing_provenance"]
     assert "host.platform" in result["baseline_missing_provenance"]
     assert result["candidate_missing_provenance"] == []
+
+
+def test_compare_release_cli_writes_machine_readable_output(tmp_path):
+    from benchmarks import compare_release
+
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+    output = tmp_path / "comparison.json"
+
+    host = {
+        "platform": "linux",
+        "machine": "x86_64",
+        "processor": "cpu",
+        "python": "3.8.20",
+        "cpu_count": 8,
+    }
+    baseline.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "fixture_sha256": "a" * 64,
+            "host": host,
+            "configurations": [_config(2)],
+        }),
+        encoding="utf-8",
+    )
+    candidate.write_text(
+        json.dumps({
+            "schema_version": 1,
+            "fixture_sha256": "a" * 64,
+            "host": host,
+            "configurations": [_config(2)],
+        }),
+        encoding="utf-8",
+    )
+
+    assert compare_release.main([
+        str(baseline),
+        str(candidate),
+        "--require-same-configurations",
+        "--require-compatible-environment",
+        "--max-regression-percent",
+        "10",
+        "--output",
+        str(output),
+    ]) == 0
+
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["threshold_percent"] == 10.0
+    assert payload["require_same_configurations"] is True
+    assert payload["require_compatible_environment"] is True
+    assert payload["failures"] == []
