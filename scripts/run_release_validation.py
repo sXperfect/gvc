@@ -91,6 +91,18 @@ def _git_blob(path):
     return _git_output("hash-object", str(path))
 
 
+def _install_and_smoke_artifact(path, name):
+    from scripts import ci
+
+    status = ci.install_and_smoke_artifact(Path(path).resolve(), name)
+    if status:
+        raise RuntimeError(
+            "{} artifact install/smoke failed with status {}".format(
+                name, status
+            )
+        )
+
+
 def _record_file(path):
     value = Path(path).resolve()
     return {
@@ -296,6 +308,8 @@ def main(argv=None):
             artifact_data = json.loads(
                 artifact_evidence.read_text(encoding="utf-8")
             )
+            _install_and_smoke_artifact(wheels[0], "release-wheel")
+            _install_and_smoke_artifact(sdists[0], "release-sdist")
         except Exception as exc:
             evidence["steps"].append(
                 {
@@ -316,6 +330,7 @@ def main(argv=None):
                 "version": version,
                 "evidence": _record_file(artifact_evidence),
                 "artifacts": artifact_data["artifacts"],
+                "install_smoke": ["wheel", "sdist"],
             }
         )
 
