@@ -153,3 +153,14 @@ def test_adaptive_missing_roundtrip_at_int8_upper_boundary():
         encoded, missing_value, na_value
     )
     np.testing.assert_array_equal(restored, source)
+
+
+
+def test_matrix_to_tensor_rejects_invalid_grouping():
+    matrix = np.zeros((2, 5), dtype=np.uint8)
+
+    with pytest.raises(ValueError, match="positive"):
+        binarization.matrix_to_tensor(matrix, 0)
+
+    with pytest.raises(ValueError, match="divisible"):
+        binarization.matrix_to_tensor(matrix, 2)
