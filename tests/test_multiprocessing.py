@@ -786,23 +786,22 @@ def test_real_parent_sigterm_cleans_child_processes_and_temp_artifacts(tmp_path)
         """
         import multiprocessing as mp
         import os
-        import time
         from pathlib import Path
 
         from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+        from tests.mp_test_codec import signal_child
 
         marker = Path({marker!r})
         temp_output = Path({temp_output!r})
         final_output = Path({final_output!r})
 
-        def child():
-            marker.write_text(str(os.getpid()))
-            while True:
-                time.sleep(1)
-
         if __name__ == "__main__":
             context = mp.get_context()
-            proc = context.Process(name="GVC-Signal-Child", target=child)
+            proc = context.Process(
+                name="GVC-Signal-Child",
+                target=signal_child,
+                args=(str(marker),),
+            )
             proc._gvc_stage = "encoder"
             proc._gvc_worker_id = 0
             supervisor = EncodeProcessSupervisor(
