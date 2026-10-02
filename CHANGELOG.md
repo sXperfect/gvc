@@ -36,7 +36,12 @@ All notable changes to this repository will be documented here.
   storage size, and random-access latency.
 - A controlled-machine benchmark regression comparator and static 1.0 release-readiness preflight.
 - A manual release-validation workflow and machine-readable evidence runner for
-  full historical, benchmark, and optional regression-budget checks.
+  full historical, benchmark, artifact, provenance, and explicit
+  regression-budget checks.
+- An explicit platform-support policy: Linux is the validated 1.0.x release
+  platform; macOS and Windows remain best-effort until separately release-gated.
+- A documentation index linking release, compatibility, CI, testing, versioning,
+  multiprocessing, Python-support, and platform policy documents.
 - Bounded real-JBIG multiprocessing queue-pressure and random-access release
   regressions.
 - Complete file-level Encoder/Decoder regression coverage for bit-plane,
