@@ -552,3 +552,86 @@ def test_writer_io_failure_is_structured(monkeypatch, tmp_path):
     assert error.error_type == "OSError"
     assert "disk write failure" in error.message
     assert stop.is_set()
+
+
+def test_supervisor_sigterm_handler_is_structured_and_restored(monkeypatch, tmp_path):
+    import signal
+
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    error_q = Queue()
+    status_q = Queue()
+    stop_event = DummyEvent()
+    supervisor = EncodeProcessSupervisor(
+        processes=[],
+        error_q=error_q,
+        status_q=status_q,
+        stop_event=stop_event,
+        queues=[],
+        temp_output=tmp_path / "signal.tmp",
+        final_output=tmp_path / "signal.gvc",
+    )
+
+    previous_handler = object()
+    installed = {}
+
+    monkeypatch.setattr(signal, "getsignal", lambda signum: previous_handler)
+
+    def fake_signal(signum, handler):
+        installed[signum] = handler
+
+    monkeypatch.setattr(signal, "signal", fake_signal)
+
+    previous = supervisor._install_parent_signal_handlers()
+    assert signal.SIGTERM in previous
+    assert previous[signal.SIGTERM] is previous_handler
+
+    with pytest.raises(MultiprocessingEncodeError, match="SignalTermination") as exc_info:
+        installed[signal.SIGTERM](signal.SIGTERM, None)
+
+    assert stop_event.is_set()
+    assert exc_info.value.errors[0].stage == "supervisor"
+    assert exc_info.value.errors[0].error_type == "SignalTermination"
+
+    supervisor._restore_parent_signal_handlers(previous)
+    assert installed[signal.SIGTERM] is previous_handler
+
+
+def test_supervisor_run_restores_signal_handler_after_failure(monkeypatch, tmp_path):
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[],
+        error_q=Queue(),
+        status_q=Queue(),
+        stop_event=DummyEvent(),
+        queues=[],
+        temp_output=tmp_path / "restore.tmp",
+        final_output=tmp_path / "restore.gvc",
+    )
+
+    restored = []
+    monkeypatch.setattr(supervisor, "start", lambda: None)
+    monkeypatch.setattr(
+        supervisor,
+        "_install_parent_signal_handlers",
+        lambda: {15: "previous"},
+    )
+    monkeypatch.setattr(
+        supervisor,
+        "_restore_parent_signal_handlers",
+        lambda previous: restored.append(previous),
+    )
+    monkeypatch.setattr(
+        supervisor,
+        "wait",
+        lambda: (_ for _ in ()).throw(RuntimeError("synthetic failure")),
+    )
+    monkeypatch.setattr(supervisor, "cancel", lambda: None)
+    monkeypatch.setattr(supervisor, "cleanup_temp", lambda: None)
+    monkeypatch.setattr(supervisor, "cleanup_ipc", lambda: None)
+
+    with pytest.raises(RuntimeError, match="synthetic failure"):
+        supervisor.run()
+
+    assert restored == [{15: "previous"}]
