@@ -296,15 +296,24 @@ def adaptive_max_value(allele_matrix):
     return allele_matrix.astype(gvc.common.ALLELE_DTYPE), missing_rep_val, na_rep_val
 
 def undo_adaptive_max_value(allele_array, missing_rep_val, na_rep_val):
-    allele_array = allele_array.astype(gvc.common.SIGNED_ALLELE_DTYPE)
+    # Decode reserved uint8 representatives in a wider signed dtype first.
+    # Casting directly to int8 would wrap representatives 128..255 before
+    # they can be recognized.
+    allele_array = np.asarray(allele_array).astype(np.int16, copy=True)
 
     if na_rep_val is not None:
-        allele_array[allele_array == na_rep_val] = -2
+        allele_array[allele_array == int(na_rep_val)] = -2
 
     if missing_rep_val is not None:
-        allele_array[allele_array == missing_rep_val] = -1
-    
-    return allele_array
+        allele_array[allele_array == int(missing_rep_val)] = -1
+
+    info = np.iinfo(gvc.common.SIGNED_ALLELE_DTYPE)
+    if allele_array.size and (
+        np.min(allele_array) < info.min or np.max(allele_array) > info.max
+    ):
+        raise ValueError("decoded allele value is outside the supported int8 range")
+
+    return allele_array.astype(gvc.common.SIGNED_ALLELE_DTYPE)
 
 def split_genotype_matrix(genotype_matrix: List[str]):
     r"""
