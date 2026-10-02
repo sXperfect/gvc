@@ -34,6 +34,7 @@ REQUIRED_PATHS = (
     "tests/test_historical_luh_fixture.py",
     "tests/test_jbigkit.py",
     "tests/test_jbigkit_multiprocessing.py",
+    "docs/development/platform-support.md",
 )
 
 REQUIRED_WORKFLOW_SNIPPETS = (
@@ -89,6 +90,14 @@ def check_readiness(allow_dev=True):
         problems.append("historical LUH fixture is not pinned to reviewed commit")
     if "af45a419e46563906ac51fad0be869291316cea9" not in workflow:
         problems.append("historical LUH fixture blob identity is not checked")
+
+    platform_support = (
+        ROOT / "docs" / "development" / "platform-support.md"
+    ).read_text(encoding="utf-8")
+    if "validated on **Linux**" not in platform_support:
+        problems.append("platform policy must identify Linux as validated")
+    if "best-effort" not in platform_support or "macOS" not in platform_support or "Windows" not in platform_support:
+        problems.append("platform policy must mark macOS/Windows as best-effort")
 
     return problems
 
