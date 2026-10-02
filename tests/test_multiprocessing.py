@@ -927,3 +927,45 @@ def test_transaction_commit_replaces_file_and_metadata_without_backup_leaks(tmp_
     assert not temp_metadata.exists()
     assert not list(tmp_path.glob("replace.gvc.gvc-backup-*"))
     assert not list(tmp_path.glob("replace.gvc.metadata.gvc-backup-*"))
+
+
+def test_cleanup_ipc_closes_all_queues_even_when_one_cleanup_fails(tmp_path):
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    class FakeQueue:
+        def __init__(self, fail_cancel=False, fail_close=False):
+            self.cancel_calls = 0
+            self.close_calls = 0
+            self.fail_cancel = fail_cancel
+            self.fail_close = fail_close
+
+        def cancel_join_thread(self):
+            self.cancel_calls += 1
+            if self.fail_cancel:
+                raise RuntimeError("cancel failed")
+
+        def close(self):
+            self.close_calls += 1
+            if self.fail_close:
+                raise RuntimeError("close failed")
+
+    q1 = FakeQueue(fail_cancel=True)
+    q2 = FakeQueue(fail_close=True)
+    error_q = FakeQueue()
+    status_q = FakeQueue()
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[],
+        error_q=error_q,
+        status_q=status_q,
+        stop_event=DummyEvent(),
+        queues=[q1, q2],
+        temp_output=tmp_path / "ipc.tmp",
+        final_output=tmp_path / "ipc.gvc",
+    )
+
+    supervisor.cleanup_ipc()
+
+    for q in (q1, q2, error_q, status_q):
+        assert q.cancel_calls == 1
+        assert q.close_calls == 1
