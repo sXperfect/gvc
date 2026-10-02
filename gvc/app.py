@@ -149,20 +149,18 @@ def run(args, run_as_module: bool):
         log.debug('  %-16s: %s', arg, getattr(args, arg))
 
     if args.mode == "decode":
-        if args.pos is None and args.samples is None:
-            decoder = Decoder(args.input, args.output)
-            decoder.decode()
-            
-        else:
-            decoder = Decoder(args.input, args.output)
-            decoder.random_access(
-                args.pos,
-                args.samples
-            )
-            
+        with Decoder(args.input, args.output) as decoder:
+            if args.pos is None and args.samples is None:
+                decoder.decode()
+            else:
+                decoder.random_access(
+                    args.pos,
+                    args.samples
+                )
+
     elif args.mode == "compare":
-        decoder = Decoder(args.input, None)
-        decoder.compare(args.output)
+        with Decoder(args.input, None) as decoder:
+            decoder.compare(args.output)
 
     elif args.mode == "encode":
         encoder = Encoder(
