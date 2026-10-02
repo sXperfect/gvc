@@ -139,3 +139,22 @@ The maintained suite covers:
 
 Large production-scale queue pressure, real external JBIG subprocess behavior,
 and non-Linux native multiprocessing remain release/offline verification items.
+
+
+## Parent termination handling
+
+On platforms that provide `SIGTERM`, the parent supervisor temporarily installs
+a parent-only termination handler after child processes have started. A received
+`SIGTERM` is converted into a structured `SignalTermination` supervisor
+error. Normal supervisor unwinding then:
+
+1. sets the shared stop event;
+2. gives children a bounded graceful-exit window;
+3. terminates/kills any remaining children;
+4. removes temporary GVC and metadata artifacts;
+5. restores the parent's previous signal handler;
+6. closes IPC queues without waiting indefinitely for dead feeder threads.
+
+This is intended to make scheduler cancellation and ordinary process
+termination behave like any other supervised failure rather than publishing a
+partial output.
