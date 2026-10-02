@@ -18,13 +18,22 @@ _phasing_dict = {
 _phasing_val_to_str = ['|', '/']
 
 def _gt_code_to_int(gt_code):
+    if gt_code == ".":
+        return gvc.common.SIGNED_ALLELE_DTYPE(-1)
+
     try:
-        return gvc.common.ALLELE_DTYPE(gt_code)
-    except ValueError:
-        if gt_code == ".":
-            return gvc.common.SIGNED_ALLELE_DTYPE(-1)
-        else:
-            raise ValueError()
+        value = int(gt_code)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid genotype allele value: {!r}".format(gt_code)) from exc
+
+    info = np.iinfo(gvc.common.SIGNED_ALLELE_DTYPE)
+    if not 0 <= value <= info.max:
+        raise ValueError(
+            "genotype allele value is outside the supported range 0..{}".format(
+                info.max
+            )
+        )
+    return gvc.common.SIGNED_ALLELE_DTYPE(value)
 
 def _int_to_gt_code(val):
 
