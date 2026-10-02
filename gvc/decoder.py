@@ -713,69 +713,103 @@ class Decoder(object):
             print(combined, end="")
         return combined
 
-    def compare(self,
-        orig_fpath
-    ):
-        
-        block_size = None
-        reader_it = None
+    def compare(self, orig_fpath):
+        reader_it = iter(vcf_genotypes_reader(orig_fpath, None, 1))
+
         for i_access_unit in range(self.num_access_units):
             self.decoder_context.set_access_unit(i_access_unit)
-            
-            for i_block, block in enumerate(self.decoder_context.curr_access_unit.blocks):
-                log.info('Comparing content from AC:{} BLK:{}'.format(i_access_unit, i_block))
 
-                with utils.catchtime() as t:
-                    recon_allele_matrix, recon_phasing_mat = decode_encoded_variants(
-                        self.decoder_context.curr_parameter_set,
-                        block.block_payload,
-                        ret_gt=False
+            for i_block, block in enumerate(
+                self.decoder_context.curr_access_unit.blocks
+            ):
+                log.info(
+                    "Comparing content from AC:{} BLK:{}".format(
+                        i_access_unit, i_block
+                    )
+                )
+
+                with utils.catchtime() as timer:
+                    recon_allele_matrix, recon_phasing_mat = (
+                        decode_encoded_variants(
+                            self.decoder_context.curr_parameter_set,
+                            block.block_payload,
+                            ret_gt=False,
+                        )
                     )
 
-                log.info("Decoding time:{:.3f}".format(t.time))
-        
-                if block_size is None:
-                    #? Initialize VCF Reader
-                    block_size = recon_allele_matrix.shape[0]
-                    reader = vcf_genotypes_reader(orig_fpath, None, block_size)
-                    reader_it = iter(reader)
-                    
-                allele_matrix, phasing_matrix, p, missing_rep_val, na_rep_val = next(reader_it)
-                allele_matrix = binarization.undo_adaptive_max_value(
-                    allele_matrix, missing_rep_val, na_rep_val,
-                )
-                
-                #? Compare
-                if not np.array_equal(allele_matrix, recon_allele_matrix):
+                log.info("Decoding time:{:.3f}".format(timer.time))
+
+                source_alleles = []
+                source_phases = []
+                for _ in range(recon_allele_matrix.shape[0]):
+                    try:
+                        (
+                            allele_matrix,
+                            phasing_matrix,
+                            source_p,
+                            missing_rep_val,
+                            na_rep_val,
+                        ) = next(reader_it)
+                    except StopIteration as exc:
+                        raise ValueError(
+                            "encoded stream contains more variants than original VCF"
+                        ) from exc
+
+                    if source_p != self.decoder_context.curr_parameter_set.p:
+                        raise ValueError(
+                            "original VCF ploidy does not match encoded parameter set"
+                        )
+                    source_alleles.append(
+                        binarization.undo_adaptive_max_value(
+                            allele_matrix,
+                            missing_rep_val,
+                            na_rep_val,
+                        )
+                    )
+                    source_phases.append(phasing_matrix)
+
+                allele_matrix = np.concatenate(source_alleles, axis=0)
+                phasing_matrix = np.concatenate(source_phases, axis=0)
+
+                if not np.array_equal(
+                    allele_matrix,
+                    recon_allele_matrix,
+                ):
                     raise ValueError(
                         "allele matrix differs at access unit {} block {}".format(
                             i_access_unit, i_block
                         )
                     )
 
-                #? Handle phasing value. If the phasing matrix is uniform, take a single value for the comparison
                 if np.all(phasing_matrix == 0) or np.all(phasing_matrix == 1):
-                    phasing_val = phasing_matrix[0][0]
-                    if phasing_val != recon_phasing_mat:
+                    if phasing_matrix.size:
+                        phasing_val = phasing_matrix.flat[0]
+                    else:
+                        phasing_val = 0
+                    if bool(phasing_val) != bool(recon_phasing_mat):
                         raise ValueError(
                             "phasing value differs at access unit {} block {}".format(
                                 i_access_unit, i_block
                             )
                         )
-                elif not np.array_equal(phasing_matrix, recon_phasing_mat):
+                elif not np.array_equal(
+                    phasing_matrix,
+                    recon_phasing_mat,
+                ):
                     raise ValueError(
                         "phasing matrix differs at access unit {} block {}".format(
                             i_access_unit, i_block
                         )
                     )
-                    
-                log.info("Contents match!".format(i_access_unit, i_block))
-                
-        if reader_it is None:
-            reader_it = iter(vcf_genotypes_reader(orig_fpath, None, 1))
+
+                log.info("Contents match!")
 
         try:
             next(reader_it)
-            raise ValueError("There are more data in the original vcf file than the encoded one!")
         except StopIteration:
             log.info("Comparison is complete")
+        else:
+            raise ValueError(
+                "original VCF contains more variants than encoded stream"
+            )
+
