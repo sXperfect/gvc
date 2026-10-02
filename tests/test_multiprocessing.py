@@ -890,3 +890,40 @@ def test_supervisor_rejects_reader_writer_block_count_mismatch(tmp_path):
 
     with pytest.raises(MultiprocessingEncodeError, match="reader produced 5, writer committed 4"):
         supervisor.wait()
+
+
+def test_transaction_commit_replaces_file_and_metadata_without_backup_leaks(tmp_path):
+    import queue as local_queue
+
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    final = tmp_path / "replace.gvc"
+    final.write_bytes(b"OLD-FILE")
+    final_metadata = tmp_path / "replace.gvc.metadata"
+    final_metadata.mkdir()
+    (final_metadata / "marker").write_text("OLD-METADATA")
+
+    temp = tmp_path / "replace.gvc.tmp.123"
+    temp.write_bytes(b"NEW-FILE")
+    temp_metadata = tmp_path / "replace.gvc.tmp.123.metadata"
+    temp_metadata.mkdir()
+    (temp_metadata / "marker").write_text("NEW-METADATA")
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[],
+        error_q=local_queue.Queue(),
+        status_q=local_queue.Queue(),
+        stop_event=DummyEvent(),
+        queues=[],
+        temp_output=temp,
+        final_output=final,
+    )
+
+    supervisor.commit()
+
+    assert final.read_bytes() == b"NEW-FILE"
+    assert (final_metadata / "marker").read_text() == "NEW-METADATA"
+    assert not temp.exists()
+    assert not temp_metadata.exists()
+    assert not list(tmp_path.glob("replace.gvc.gvc-backup-*"))
+    assert not list(tmp_path.glob("replace.gvc.metadata.gvc-backup-*"))
