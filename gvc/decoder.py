@@ -117,7 +117,7 @@ def decode_encoded_variants(
     elif param_set.binarization_id in [consts.BinarizationID.ROW_BIN_SPLIT]:
         try:
             variants_amax_payload = encoded_variants.variants_amax_payload.read()
-        except:
+        except AttributeError:
             variants_amax_payload = encoded_variants.variants_amax_payload
             
         additional_info = ds.VectorAMax.from_bytes(variants_amax_payload).vector
@@ -449,16 +449,20 @@ class DecoderContext(object):
     def set_access_unit(self, access_unit_id):
         try:
             self.curr_access_unit = self.access_units[access_unit_id]
-        except KeyError:
+        except KeyError as exc:
             log.error('No access unit with id {} found'.format(access_unit_id))
-            raise gvc.errors.GvcError()
+            raise ValueError(
+                'No access unit with id {} found'.format(access_unit_id)
+            ) from exc
 
         parameter_set_id = self.curr_access_unit.header.parameter_set_id
         try:
             self.curr_parameter_set = self.parameter_sets[parameter_set_id]
-        except KeyError:
+        except KeyError as exc:
             log.error('No parameter set with id {} found'.format(parameter_set_id))
-            raise gvc.errors.GvcError()
+            raise ValueError(
+                'No parameter set with id {} found'.format(parameter_set_id)
+            ) from exc
 
     def __len__(self):
         return len(self.parameter_sets)
@@ -501,8 +505,16 @@ class Decoder(object):
 
         header = ds.DataUnitHeader.from_bitstream(consts.DataUnitType.PARAMETER_SET,
                                                self._bitstream_reader)
-        param_set = ds.ParameterSet.from_bitstream(self._bitstream_reader,
-                                                                    header)
+        param_set = ds.ParameterSet.from_bitstream(
+            self._bitstream_reader,
+            header,
+        )
+        if param_set.parameter_set_id in self.decoder_context.parameter_sets:
+            raise ValueError(
+                "duplicate parameter_set_id: {}".format(
+                    param_set.parameter_set_id
+                )
+            )
         self.decoder_context.parameter_sets[param_set.parameter_set_id] = param_set
 
     def _cache_access_unit(self):
@@ -525,14 +537,23 @@ class Decoder(object):
             nrows += tensor_shape[0]
 
             if self.decoder_context.ncols is not None:
-                if tensor_shape[1] != self.decoder_context.ncols or tensor_shape[2] != param_set.p:
-                    log.error('Tensor shape not consistent')
+                if tensor_shape[1] != self.decoder_context.ncols:
+                    raise ValueError(
+                        "tensor sample count is inconsistent: expected {}, got {}".format(
+                            self.decoder_context.ncols,
+                            tensor_shape[1],
+                        )
+                    )
             else:
                 self.decoder_context.ncols = tensor_shape[1]
 
         #? Preallocate list with values None
         #? Created to handle case where access unit id stored is not in order
         access_unit_id = acc_unit.header.access_unit_id
+        if access_unit_id in self.decoder_context.access_units:
+            raise ValueError(
+                "duplicate access_unit_id: {}".format(access_unit_id)
+            )
         if len(self.decoder_context.nrows) <= access_unit_id:
             for _ in range(access_unit_id - len(self.decoder_context.nrows)):
                 self.decoder_context.nrows.append(None)
