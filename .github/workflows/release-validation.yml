@@ -143,6 +143,7 @@ jobs:
           path: |
             tmp/release-validation/benchmark.json
             tmp/release-validation/evidence.json
+            tmp/release-validation/comparison.json
           if-no-files-found: warn
           retention-days: 30
 
