@@ -167,3 +167,36 @@ def test_metadata_end_writes_empty_root_index(tmp_path):
     root = np.load(metadata / "main.npy", allow_pickle=False)
     assert root.shape == (0, 2)
     assert root.dtype == np.uint64
+
+
+
+def test_vcf_reader_rejects_allele_index_that_overflows_working_dtype(monkeypatch):
+    class FakeGenotype:
+        def array(self):
+            return np.array([[128, 0, 1]], dtype=np.int16)
+
+    class FakeVariant:
+        ploidy = 2
+        POS = 100
+        genotype = FakeGenotype()
+
+    class FakeVCF:
+        raw_header = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE_A"
+        )
+        samples = ["SAMPLE_A"]
+
+        def __init__(self, *args, **kwargs):
+            self._variants = [FakeVariant()]
+
+        def __iter__(self):
+            return iter(self._variants)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(reader, "_vcf_class", lambda: FakeVCF)
+
+    with pytest.raises(ValueError, match="outside the supported range"):
+        list(reader.vcf_genotypes_reader("synthetic.vcf", None, block_size=1))
