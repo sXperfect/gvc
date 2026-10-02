@@ -411,3 +411,19 @@ def test_decoder_rejects_incomplete_metadata_sidecar(framed_test_codec, tmp_path
     with pytest.raises(FileNotFoundError):
         decoder = Decoder(str(encoded))
         _close_decoder(decoder)
+
+
+
+def test_decoder_rejects_metadata_sample_count_mismatch(
+    framed_test_codec,
+    tmp_path,
+):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "sample-count-mismatch"
+    )
+    metadata = Path(str(encoded) + ".metadata")
+    np.save(metadata / "samples.npy", np.array(["ONLY_ONE_SAMPLE"]))
+
+    with pytest.raises(ValueError, match="metadata sample count"):
+        decoder = Decoder(str(encoded))
+        _close_decoder(decoder)
