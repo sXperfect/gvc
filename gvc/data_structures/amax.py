@@ -31,6 +31,17 @@ class VectorAMax:
             consts.AMAX_BITS_PER_ENTRY_LEN, ret_int=True
         )
 
+        header_len = (
+            consts.AMAX_NUM_ENTRIES_LEN
+            + consts.AMAX_BITS_PER_ENTRY_LEN
+        )
+        remaining_bits = (len(data) - header_len) * 8
+        # Every entry requires at least its presence flag. Reject impossible
+        # counts before allocating the output vector so malformed input cannot
+        # trigger an attacker-controlled large allocation.
+        if num_entries > remaining_bits:
+            raise ValueError("AMax payload entry count exceeds available data")
+
         vector = np.ones(num_entries, dtype=np.uint64)
         for i in range(num_entries):
             flag = istream.read_bits(consts.AMAX_FLAG_BITLEN)
