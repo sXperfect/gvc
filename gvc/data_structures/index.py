@@ -25,6 +25,17 @@ class Index:
             raise ValueError("sample index must be one-dimensional")
         if len(set(self.samples.tolist())) != len(self.samples):
             raise ValueError("sample index contains duplicate sample IDs")
+        if (
+            decoder_context.ncols is not None
+            and len(self.samples) != decoder_context.ncols
+        ):
+            raise ValueError(
+                "metadata sample count does not match encoded data: "
+                "expected {}, got {}".format(
+                    decoder_context.ncols,
+                    len(self.samples),
+                )
+            )
 
         block_ptrs = []
         param_set_ids = []
