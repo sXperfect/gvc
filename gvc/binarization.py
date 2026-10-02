@@ -298,7 +298,10 @@ def adaptive_max_value(allele_matrix):
         raise ValueError(
             "allele values must be within -2..{}".format(signed_info.max)
         )
-    allele_matrix = allele_matrix.copy()
+    # Widen before inserting reserved representatives. At the int8 upper
+    # boundary, valid representatives are 128/129 and would overflow if
+    # assigned into the original working dtype.
+    allele_matrix = allele_matrix.astype(np.int16, copy=True)
 
     dot_mask = allele_matrix == -1
     na_mask = allele_matrix == -2
