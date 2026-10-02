@@ -149,3 +149,21 @@ def test_reader_splits_blocks_when_ploidy_changes():
         diploid_phases,
         np.array([[False, True], [True, False]], dtype=bool),
     )
+
+
+
+def test_metadata_end_writes_empty_root_index(tmp_path):
+    class FakeVCF:
+        raw_header = (
+            "##fileformat=VCFv4.2\n"
+            "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tSAMPLE_A"
+        )
+
+    metadata = tmp_path / "empty.gvc.metadata"
+    handler = reader.MetaHandler(FakeVCF(), str(metadata), block_size=4)
+    handler.init()
+    handler.end()
+
+    root = np.load(metadata / "main.npy", allow_pickle=False)
+    assert root.shape == (0, 2)
+    assert root.dtype == np.uint64
