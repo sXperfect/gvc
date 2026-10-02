@@ -29,6 +29,8 @@ def debin_rc_bin_split(np.ndarray[bool, ndim=2, cast=True] bin_mat, np.ndarray[u
 
     if np.any(bitlen_vect == 0):
         raise ValueError("bit-length vector entries must be positive")
+    if np.any(bitlen_vect > 8):
+        raise ValueError("bit-length vector entries must not exceed 8")
     if int(np.sum(bitlen_vect, dtype=np.uint64)) != bin_mat.shape[0]:
         raise ValueError("bit-length vector does not match encoded row count")
 
