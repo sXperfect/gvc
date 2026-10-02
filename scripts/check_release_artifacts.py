@@ -18,9 +18,12 @@ REQUIRED_WHEEL_MODULES = (
 )
 REQUIRED_SDIST_PATHS = (
     "pyproject.toml",
+    "setup.py",
     "README.md",
     "LICENSE",
     "NOTICE.md",
+    "gvc/__init__.py",
+    "gvc/_version.py",
     "gvc/cquery.pyx",
     "gvc/cdebinarize.pyx",
     "gvc/data_structures/crc_id.pyx",
@@ -40,9 +43,24 @@ def _wheel_metadata(archive):
     metadata_names = [
         name for name in names if name.endswith(".dist-info/METADATA")
     ]
+    wheel_names = [
+        name for name in names if name.endswith(".dist-info/WHEEL")
+    ]
+    entry_point_names = [
+        name for name in names if name.endswith(".dist-info/entry_points.txt")
+    ]
     if len(metadata_names) != 1:
         raise ValueError("wheel must contain exactly one dist-info/METADATA")
-    return email.message_from_bytes(archive.read(metadata_names[0])), names
+    if len(wheel_names) != 1:
+        raise ValueError("wheel must contain exactly one dist-info/WHEEL")
+    if len(entry_point_names) != 1:
+        raise ValueError("wheel must contain exactly one dist-info/entry_points.txt")
+    return (
+        email.message_from_bytes(archive.read(metadata_names[0])),
+        email.message_from_bytes(archive.read(wheel_names[0])),
+        archive.read(entry_point_names[0]).decode("utf-8"),
+        names,
+    )
 
 
 def _wheel_native_module_present(names, module):
@@ -67,7 +85,7 @@ def inspect_artifacts(wheel_path, sdist_path, expected_version):
     }
 
     with zipfile.ZipFile(wheel_path) as archive:
-        metadata, names = _wheel_metadata(archive)
+        metadata, wheel_metadata, entry_points, names = _wheel_metadata(archive)
         if metadata.get("Name") != "gvc":
             raise ValueError("wheel metadata Name must be gvc")
         if metadata.get("Version") != expected_version:
@@ -78,6 +96,10 @@ def inspect_artifacts(wheel_path, sdist_path, expected_version):
             )
         if metadata.get("Requires-Python") != ">=3.8":
             raise ValueError("wheel must declare Requires-Python >=3.8")
+        if wheel_metadata.get("Root-Is-Purelib") != "false":
+            raise ValueError("wheel with native extensions must not be purelib")
+        if "gvc = gvc.__main__:main" not in entry_points:
+            raise ValueError("wheel is missing the gvc console entry point")
 
         missing_native = [
             module
