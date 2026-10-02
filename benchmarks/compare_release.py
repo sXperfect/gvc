@@ -72,6 +72,22 @@ def _change_percent(baseline, candidate, direction):
     return (candidate - baseline) / baseline * 100.0
 
 
+def _provenance_mismatches(baseline, candidate):
+    mismatches = []
+    for field in ("fixture_sha256",):
+        if baseline.get(field) and candidate.get(field) and baseline[field] != candidate[field]:
+            mismatches.append(field)
+
+    baseline_host = baseline.get("host") or {}
+    candidate_host = candidate.get("host") or {}
+    for field in ("platform", "machine", "processor", "python", "cpu_count"):
+        old = baseline_host.get(field)
+        new = candidate_host.get(field)
+        if old is not None and new is not None and old != new:
+            mismatches.append("host." + field)
+    return mismatches
+
+
 def compare_reports(baseline, candidate, threshold_percent=None):
     baseline_index = _index(baseline)
     candidate_index = _index(candidate)
@@ -110,6 +126,7 @@ def compare_reports(baseline, candidate, threshold_percent=None):
     return {
         "missing_configurations": missing,
         "extra_configurations": extra,
+        "provenance_mismatches": _provenance_mismatches(baseline, candidate),
         "comparisons": rows,
         "failures": failures,
     }
@@ -141,6 +158,11 @@ def main(argv=None):
         action="store_true",
         help="fail if either report has unmatched configurations",
     )
+    parser.add_argument(
+        "--require-compatible-environment",
+        action="store_true",
+        help="fail when fixture or benchmark host provenance differs",
+    )
     args = parser.parse_args(argv)
 
     if (
@@ -170,6 +192,11 @@ def main(argv=None):
                 )
             )
 
+    if result["provenance_mismatches"]:
+        print("benchmark provenance differs:", file=sys.stderr)
+        for field in result["provenance_mismatches"]:
+            print("  " + field, file=sys.stderr)
+
     if result["missing_configurations"]:
         print("missing candidate configurations:", file=sys.stderr)
         for key in result["missing_configurations"]:
@@ -195,6 +222,8 @@ def main(argv=None):
     if args.require_same_configurations and (
         result["missing_configurations"] or result["extra_configurations"]
     ):
+        return 1
+    if args.require_compatible_environment and result["provenance_mismatches"]:
         return 1
 
     return 0
