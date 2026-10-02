@@ -16,11 +16,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: verify
+  py38-reviewed:
+    name: Python 3.8 reviewed stack
     if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -54,8 +54,6 @@ jobs:
 
       - name: Verify reviewed Python 3.8 latest stack
         run: |
-          python -m venv .venv-py38-reviewed
-          . .venv-py38-reviewed/bin/activate
           python -m pip install --upgrade "pip<25.1"
           PIP_CONSTRAINT=ci/constraints/py38-latest.txt \
             python -m pip install --only-binary=:all: --upgrade --upgrade-strategy eager -e ".[test,all]"
@@ -88,153 +86,78 @@ jobs:
               assert config["peak_rss_kib_self"] > 0
           PY
           python scripts/ci.py optional
-          deactivate
 
-      - name: Clean reviewed Python 3.8 products
-        run: |
-          find gvc -name '*.so' -delete
-          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
+  py38-resolver:
+    name: Python 3.8 resolver drift
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Verify Python 3.8 resolver has not moved
         run: |
-          python -m venv .venv-py38-resolver
-          . .venv-py38-resolver/bin/activate
           python -m pip install --upgrade "pip<25.1"
           python -m pip install --only-binary=:all: --upgrade --upgrade-strategy eager -e ".[test,all]"
           python -m pip check
           python scripts/check_py38_latest.py
           python -m pytest
           python scripts/ci.py optional
-          deactivate
 
-      - name: Clean Python 3.8 products
-        run: |
-          find gvc -name '*.so' -delete
-          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
+  compatibility:
+    name: Python ${{ matrix.python }}
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
 
-      - name: Set up Python 3.9
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python }}
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Verify Python 3.9 newest-resolvable stack
+      - name: Install current stack
         run: |
           python -m pip install --upgrade pip
           python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
-          python scripts/ci.py test
-          python scripts/ci.py optional
-          python scripts/ci.py deps
 
-      - name: Clean Python 3.9 products
+      - name: Run compatibility checks
         run: |
-          find gvc -name '*.so' -delete
-          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Verify Python 3.10 compatibility gate
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
-          python scripts/ci.py metadata
-          python scripts/ci.py syntax
-          python scripts/ci.py native
-          python scripts/ci.py test
-          python scripts/ci.py cli
-          python scripts/ci.py deps
-          python scripts/ci.py optional
-
-      - name: Clean Python 3.10 products
-        run: |
-          find gvc -name '*.so' -delete
-          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Verify Python 3.11 newest-resolvable stack
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
-          python scripts/ci.py test
-          python scripts/ci.py optional
-          python scripts/ci.py deps
-
-      - name: Clean Python 3.11 products
-        run: |
-          find gvc -name '*.so' -delete
-          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Verify Python 3.12 compatibility gate
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
-          python scripts/ci.py metadata
-          python scripts/ci.py syntax
-          python scripts/ci.py native
-          python scripts/ci.py test
-          python scripts/ci.py cli
-          python scripts/ci.py deps
-          python scripts/ci.py optional
-
-      - name: Clean Python 3.12 products
-        run: |
-          find gvc -name '*.so' -delete
-          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
-
-      - name: Set up Python 3.13
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Verify Python 3.13 newest-resolvable stack
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
-          python scripts/ci.py test
-          python scripts/ci.py optional
-          python scripts/ci.py deps
-
-      - name: Clean Python 3.13 products
-        run: |
-          find gvc -name '*.so' -delete
-          rm -rf build tmp/libgvc-build *.egg-info gvc.egg-info
-
-      - name: Set up Python 3.14
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-          cache: pip
-          cache-dependency-path: pyproject.toml
-
-      - name: Verify Python 3.14 current stack
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
-          python scripts/ci.py metadata
-          python scripts/ci.py syntax
-          python scripts/ci.py native
-          python scripts/ci.py test
-          python scripts/ci.py cli
-          python scripts/ci.py deps
-          python scripts/ci.py optional
+          case "${{ matrix.python }}" in
+            3.10|3.12|3.14)
+              python scripts/ci.py metadata
+              python scripts/ci.py syntax
+              python scripts/ci.py native
+              python scripts/ci.py test
+              python scripts/ci.py cli
+              python scripts/ci.py deps
+              python scripts/ci.py optional
+              ;;
+            *)
+              python scripts/ci.py test
+              python scripts/ci.py optional
+              python scripts/ci.py deps
+              ;;
+          esac
