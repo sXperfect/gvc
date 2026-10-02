@@ -374,6 +374,9 @@ def main(argv=None):
     )
 
     if baseline is not None:
+        comparison_output = (
+            ROOT / "tmp" / "release-validation" / "comparison.json"
+        )
         compare = [
             sys.executable,
             "benchmarks/compare_release.py",
@@ -381,6 +384,8 @@ def main(argv=None):
             str(benchmark_output),
             "--require-same-configurations",
             "--require-compatible-environment",
+            "--output",
+            str(comparison_output),
         ]
         if args.max_regression_percent is not None:
             compare += [
@@ -408,6 +413,7 @@ def main(argv=None):
                 "name": "benchmark_comparison",
                 "status": "pass",
                 "baseline": _record_file(baseline),
+                "comparison": _record_file(comparison_output),
                 "max_regression_percent": args.max_regression_percent,
             }
         )
