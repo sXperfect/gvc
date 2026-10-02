@@ -15,6 +15,8 @@ class Index:
 
         if self.root_idx.ndim != 2 or self.root_idx.shape[1] != 2:
             raise ValueError("root index must have shape (n_blocks, 2)")
+        if not np.issubdtype(self.root_idx.dtype, np.integer):
+            raise TypeError("root index positions must use an integer dtype")
         if np.any(self.root_idx[:, 0] > self.root_idx[:, 1]):
             raise ValueError("root index contains a block with start > end")
         if self.root_idx.shape[0] > 1 and np.any(
@@ -114,10 +116,22 @@ class Index:
             )
             if curr_block_idx.ndim != 1:
                 raise ValueError("block position index must be one-dimensional")
+            if not np.issubdtype(curr_block_idx.dtype, np.integer):
+                raise TypeError("block position index must use an integer dtype")
             if curr_block_idx.size > 1 and np.any(
                 curr_block_idx[1:] < curr_block_idx[:-1]
             ):
                 raise ValueError("block position index must be sorted")
+            if curr_block_idx.size:
+                expected_start = int(self.root_idx[block_id, 0])
+                expected_end = int(self.root_idx[block_id, 1])
+                if (
+                    int(curr_block_idx[0]) != expected_start
+                    or int(curr_block_idx[-1]) != expected_end
+                ):
+                    raise ValueError(
+                        "block position index does not match root index bounds"
+                    )
             self.block_idx[block_id] = curr_block_idx
 
         start_row = np.searchsorted(curr_block_idx, start_pos, side="left")
