@@ -34,11 +34,18 @@ def _int_to_gt_code(val):
         return "."
 
 def matrix_to_tensor(matrix, num_matrix):
+    matrix = np.asarray(matrix)
+    if matrix.ndim != 2:
+        raise ValueError("matrix must be two-dimensional")
+    if not isinstance(num_matrix, int) or isinstance(num_matrix, bool) or num_matrix <= 0:
+        raise ValueError("num_matrix must be a positive integer")
+    if matrix.shape[1] % num_matrix:
+        raise ValueError("matrix column count must be divisible by num_matrix")
 
     list_matrix = np.split(
-        np.expand_dims(matrix, axis=1), 
-        matrix.shape[1]//num_matrix, 
-        axis=2
+        np.expand_dims(matrix, axis=1),
+        matrix.shape[1] // num_matrix,
+        axis=2,
     )
 
     return np.concatenate(list_matrix, axis=1)
