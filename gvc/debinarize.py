@@ -91,23 +91,36 @@ ALLELE_VAL2CHAR[-2] = ''
 ALLELE_VAL2CHAR[-1] = '.'
 
 def debin_rc_bin_split(bin_mat, bitlen_vect):
-    
-    bitlen_vect = bitlen_vect.astype(np.uint8)
-    
-    nrows = len(bitlen_vect)
+    bin_mat = np.asarray(bin_mat)
+    bitlen_vect = np.asarray(bitlen_vect)
+
+    if bin_mat.ndim != 2:
+        raise ValueError("row-bin matrix must be two-dimensional")
+    if bitlen_vect.ndim != 1:
+        raise ValueError("bit-length vector must be one-dimensional")
+    if not np.issubdtype(bitlen_vect.dtype, np.integer):
+        raise TypeError("bit-length vector must contain integers")
+    if bitlen_vect.size and (
+        np.any(bitlen_vect <= 0) or np.any(bitlen_vect > 8)
+    ):
+        raise ValueError("bit-length vector entries must be within 1..8")
+
+    bit_lengths = bitlen_vect.astype(np.int64, copy=False)
+    expected_rows = int(np.sum(bit_lengths, dtype=np.int64))
+    if expected_rows != bin_mat.shape[0]:
+        raise ValueError("bit-length vector does not match encoded row count")
+
+    nrows = len(bit_lengths)
     ncols = bin_mat.shape[1]
-    
     mat = np.zeros((nrows, ncols), dtype=np.uint8)
-    
+
     irow_bin_mat = 0
     for i in range(nrows):
-        for j in range(bitlen_vect[i]):
-            
-            int_row = bin_mat[irow_bin_mat+j, :].astype(np.uint8) << j
+        for j in range(int(bit_lengths[i])):
+            int_row = bin_mat[irow_bin_mat + j, :].astype(np.uint8) << j
             mat[i, :] |= int_row
+        irow_bin_mat += int(bit_lengths[i])
 
-        irow_bin_mat += bitlen_vect[i]
-        
     return mat
 
 def allele_val2str(v):
