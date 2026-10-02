@@ -57,3 +57,11 @@ def test_amax_rejects_serialized_entry_width_above_format_limit():
         ValueError, "entry width exceeds"
     ):
         VectorAMax.from_bytes(payload)
+
+
+
+def test_row_col_decoder_rejects_entry_count_above_uint16_range():
+    with np.testing.assert_raises_regex(
+        ValueError, "outside the uint16 permutation range"
+    ):
+        RowColIds.from_bytes(b"", np.iinfo(np.uint16).max + 1)
