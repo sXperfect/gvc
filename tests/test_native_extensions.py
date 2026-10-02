@@ -245,3 +245,34 @@ def test_ctypes_libgvc_rejects_duplicate_and_trailing_payload(monkeypatch):
     payload = RowColIds(permutation).to_bytes()
     with pytest.raises(ValueError, match="trailing"):
         libds.decode_rowcolids(payload + b"\x00", len(permutation))
+
+
+
+def test_python_genotype_text_supports_multi_digit_alleles():
+    from gvc import debinarize
+
+    allele_mat = np.array([[10, 11, 2, 12]], dtype=np.int8)
+    assert debinarize.recon_gt_mat_with_phase_val(
+        allele_mat.copy(), 0, 2
+    ) == "10|11\t2|12\n"
+
+
+def test_python_genotype_text_supports_multi_digit_mixed_phase():
+    from gvc import debinarize
+
+    allele_mat = np.array([[10, 11, 12, 13]], dtype=np.int8)
+    phase_mat = np.array([[0, 1]], dtype=np.uint8)
+    assert debinarize.recon_gt_mat_with_phase_mat(
+        allele_mat.copy(), phase_mat, 2
+    ) == "10|11\t12/13\n"
+
+
+def test_python_genotype_text_rejects_inconsistent_phase_shape():
+    from gvc import debinarize
+
+    allele_mat = np.array([[0, 1, 1, 0]], dtype=np.int8)
+    with pytest.raises(ValueError, match="phasing tensor shape"):
+        debinarize.simd_tensor_to_txt(
+            allele_mat.reshape(1, 2, 2),
+            np.zeros((1, 1, 1), dtype=np.uint8),
+        )
