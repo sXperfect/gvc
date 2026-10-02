@@ -16,3 +16,31 @@ GVC API, serialized-format, or codec changes.
 
 For the detailed dependency and CI policy, see
 [../development/python-support.md](../development/python-support.md).
+
+
+## 1.0.x version states
+
+The maintained 1.0 line uses three explicit version states:
+
+- development: `1.0.<patch>.devN`
+- release candidate: `1.0.<patch>rcN`
+- final: `1.0.<patch>`
+
+Only RC and final versions are taggable. Their Git tags are exact mirrors of the
+package version with a leading `v`, for example `v1.0.1rc1` and
+`v1.0.1`.
+
+The intended promotion path for a patch release is:
+
+```text
+1.0.1.dev0 -> 1.0.1rc1 -> 1.0.1
+```
+
+Additional RCs increment the RC number while preserving the same patch number,
+for example `1.0.1rc1 -> 1.0.1rc2`. Post releases, alpha/beta releases, and
+cross-line tags such as `1.1.0rc1` are not valid states for the 1.0 release
+workflow.
+
+The package version in `gvc/_version.py` is the single source of truth. The
+wheel metadata, source-distribution root, installed `gvc.__version__`, and
+release tag must all agree with that value.
