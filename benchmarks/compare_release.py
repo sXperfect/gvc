@@ -65,7 +65,11 @@ def _change_percent(baseline, candidate, direction):
     if not math.isfinite(baseline) or not math.isfinite(candidate):
         raise ValueError("benchmark metrics must be finite")
     if baseline == 0:
-        return 0.0 if candidate == 0 else math.inf
+        if candidate == 0:
+            return 0.0
+        if direction == "higher":
+            return -math.inf
+        return math.inf
 
     if direction == "higher":
         return (baseline - candidate) / baseline * 100.0
@@ -115,14 +119,20 @@ def compare_reports(baseline, candidate, threshold_percent=None):
 
     rows = []
     failures = []
+    metric_availability_mismatches = []
     for key in sorted(set(baseline_index) & set(candidate_index), key=repr):
         old = baseline_index[key]
         new = candidate_index[key]
         metric_rows = []
         for metric, direction in METRICS.items():
-            if metric not in old or metric not in new:
+            old_present = metric in old and old[metric] is not None
+            new_present = metric in new and new[metric] is not None
+            if old_present != new_present:
+                metric_availability_mismatches.append(
+                    (key, metric, old_present, new_present)
+                )
                 continue
-            if old[metric] is None or new[metric] is None:
+            if not old_present:
                 continue
 
             regression = _change_percent(old[metric], new[metric], direction)
@@ -148,6 +158,7 @@ def compare_reports(baseline, candidate, threshold_percent=None):
         "baseline_missing_provenance": _missing_provenance(baseline),
         "candidate_missing_provenance": _missing_provenance(candidate),
         "comparisons": rows,
+        "metric_availability_mismatches": metric_availability_mismatches,
         "failures": failures,
     }
 
@@ -184,6 +195,11 @@ def main(argv=None):
         help="fail when fixture or benchmark host provenance differs",
     )
     parser.add_argument(
+        "--require-complete-metrics",
+        action="store_true",
+        help="fail if comparable metric availability differs between reports",
+    )
+    parser.add_argument(
         "--output",
         help="optional JSON file for machine-readable comparison results",
     )
@@ -207,6 +223,7 @@ def main(argv=None):
     result["threshold_percent"] = args.max_regression_percent
     result["require_same_configurations"] = bool(args.require_same_configurations)
     result["require_compatible_environment"] = bool(args.require_compatible_environment)
+    result["require_complete_metrics"] = bool(args.require_complete_metrics)
 
     if args.output:
         output = Path(args.output)
@@ -241,6 +258,19 @@ def main(argv=None):
         for field in result["candidate_missing_provenance"]:
             print("  " + field, file=sys.stderr)
 
+    if result["metric_availability_mismatches"]:
+        print("benchmark metric availability differs:", file=sys.stderr)
+        for key, metric, old_present, new_present in result["metric_availability_mismatches"]:
+            print(
+                "  {}: {} baseline_present={} candidate_present={}".format(
+                    _format_key(key),
+                    metric,
+                    old_present,
+                    new_present,
+                ),
+                file=sys.stderr,
+            )
+
     if result["missing_configurations"]:
         print("missing candidate configurations:", file=sys.stderr)
         for key in result["missing_configurations"]:
@@ -272,6 +302,8 @@ def main(argv=None):
         or result["baseline_missing_provenance"]
         or result["candidate_missing_provenance"]
     ):
+        return 1
+    if args.require_complete_metrics and result["metric_availability_mismatches"]:
         return 1
 
     return 0
