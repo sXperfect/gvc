@@ -27,10 +27,13 @@ REQUIRED_PATHS = (
 )
 
 REQUIRED_WORKFLOW_SNIPPETS = (
+    "Python 3.8 reviewed stack",
+    "Python 3.8 resolver drift",
     "Install JBIG-KIT release dependency",
     "Fetch pinned LUH historical fixture",
-    "Verify reviewed Python 3.8 latest stack",
-    "Verify Python 3.14 current stack",
+    'python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]',
+    "fail-fast: false",
+    "Run compatibility checks",
 )
 
 
