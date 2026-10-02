@@ -93,3 +93,26 @@ python benchmarks/compare_release.py \
 Throughput metrics treat lower values as regressions; latency, RSS, and encoded
 size treat higher values as regressions. Do not use these thresholds on hosted
 CI runners unless the environment is demonstrably stable.
+
+
+## Canonical controlled baseline
+
+A retained release baseline is only considered directly comparable when all of
+the following hold:
+
+- the fixture SHA-256 matches exactly;
+- benchmark configuration keys match exactly;
+- platform, machine architecture, processor identity, Python version, and CPU
+  count match;
+- the run was captured on a controlled machine rather than a shared hosted
+  runner;
+- the baseline JSON itself is retained immutably and identified by SHA-256.
+
+For RC/final validation, supplying a baseline also requires an explicit
+`--max-regression-percent` budget. This prevents a baseline comparison from
+being treated as a release gate without an agreed threshold.
+
+The candidate and retained baseline may come from different GVC commits or
+package versions—that is the purpose of the comparison—but differences in
+fixture or controlled-machine provenance must be treated as non-comparable
+rather than as performance regressions.
