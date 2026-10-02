@@ -103,6 +103,7 @@ def run_no_threads(
     temp_output = _temp_output_path(output_fpath)
     cleanup_output_pair(temp_output)
 
+    iterator = None
     try:
         with open(temp_output, 'wb') as output_f:
 
@@ -186,6 +187,13 @@ def run_no_threads(
 
         commit_output_pair(temp_output, output_fpath)
     except BaseException:
+        # Finalize/close the VCF generator before removing its temporary
+        # metadata directory; its finally block writes the sidecar index.
+        if iterator is not None:
+            try:
+                iterator.close()
+            except Exception:
+                pass
         cleanup_output_pair(temp_output)
         raise
             
