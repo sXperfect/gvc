@@ -269,3 +269,65 @@ def test_rc_dirty_worktree_persists_failure_evidence(monkeypatch, tmp_path):
     assert payload["steps"][-1]["name"] == "clean_worktree"
     assert payload["steps"][-1]["status"] == "fail"
     assert "clean git worktree" in payload["steps"][-1]["error"]
+
+
+
+def test_release_validation_requires_complete_metric_comparison(
+    monkeypatch,
+    tmp_path,
+):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"fixture")
+    benchmark = tmp_path / "benchmark.json"
+    baseline = tmp_path / "baseline.json"
+    evidence = tmp_path / "evidence.json"
+    baseline.write_text(
+        json.dumps({"schema_version": 1, "configurations": []}),
+        encoding="utf-8",
+    )
+
+    commands = []
+
+    def fake_run(command, env=None):
+        commands.append(list(command))
+        if "benchmarks/run_release.py" in command:
+            benchmark.write_text(
+                json.dumps({"schema_version": 1, "configurations": []}),
+                encoding="utf-8",
+            )
+        if "benchmarks/compare_release.py" in command:
+            output_index = command.index("--output") + 1
+            Path(command[output_index]).write_text(
+                json.dumps({}),
+                encoding="utf-8",
+            )
+
+    monkeypatch.setattr(run_release_validation, "_run", fake_run)
+
+    assert run_release_validation.main(
+        [
+            str(fixture),
+            "--benchmark-output",
+            str(benchmark),
+            "--evidence-output",
+            str(evidence),
+            "--baseline",
+            str(baseline),
+            "--max-regression-percent",
+            "5",
+            "--workers",
+            "0",
+            "--repetitions",
+            "1",
+            "--historical-max-blocks",
+            "1",
+        ]
+    ) == 0
+
+    compare_commands = [
+        command
+        for command in commands
+        if "benchmarks/compare_release.py" in command
+    ]
+    assert len(compare_commands) == 1
+    assert "--require-complete-metrics" in compare_commands[0]
