@@ -216,3 +216,26 @@ def test_rc_artifact_failure_persists_evidence(monkeypatch, tmp_path):
     assert payload["steps"][-1]["status"] == "fail"
     assert payload["steps"][-1]["version"] == "1.0.1rc1"
     assert "synthetic artifact build failure" in payload["steps"][-1]["error"]
+
+
+def test_rc_baseline_requires_explicit_regression_budget(tmp_path):
+    fixture = tmp_path / "fixture.vcf.gz"
+    fixture.write_bytes(b"fixture")
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text('{"schema_version": 1, "configurations": []}', encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        run_release_validation.main(
+            [
+                str(fixture),
+                "--benchmark-output",
+                str(tmp_path / "benchmark.json"),
+                "--baseline",
+                str(baseline),
+                "--rc",
+                "--historical-max-blocks",
+                "0",
+                "--include-sorting",
+            ]
+        )
+    assert exc_info.value.code == 2
