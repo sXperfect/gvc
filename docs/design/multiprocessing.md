@@ -158,3 +158,23 @@ error. Normal supervisor unwinding then:
 This is intended to make scheduler cancellation and ordinary process
 termination behave like any other supervised failure rather than publishing a
 partial output.
+
+
+## Additional reliability invariants
+
+The maintained regression suite also verifies:
+
+- abrupt child termination via `os._exit()` is synthesized as a structured
+  `ProcessExit` failure even when the child cannot report through
+  `error_q`;
+- bounded queue producers/consumers observe cancellation under backpressure;
+- cancellation escalates from graceful join to `terminate()` and finally
+  `kill()` where available;
+- missing reader/writer completion messages and block-count mismatches prevent
+  output commit;
+- successful replacement of an existing file+metadata pair leaves no backup
+  artifacts behind;
+- IPC cleanup attempts `cancel_join_thread()` and `close()` on every queue
+  even if one queue raises during cleanup;
+- an actual parent SIGTERM in a subprocess tears down the child process and
+  leaves no final or temporary output.
