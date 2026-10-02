@@ -10,11 +10,17 @@ def _get_header(
 
     return nrows, ncols
 
-def get_shape(
-    jbig1_bytes:bytes
-):
+def get_shape(jbig1_bytes):
+    if not isinstance(jbig1_bytes, (bytes, bytearray)):
+        raise TypeError("JBIG header must be bytes-like")
+    if len(jbig1_bytes) < BIE_HEADER_LEN:
+        raise ValueError(
+            "JBIG header is truncated: expected {} bytes, got {}".format(
+                BIE_HEADER_LEN, len(jbig1_bytes)
+            )
+        )
 
-    if isinstance(jbig1_bytes, bytes):
-        return _get_header(jbig1_bytes)
-    else:
-        raise TypeError()
+    nrows, ncols = _get_header(jbig1_bytes)
+    if nrows <= 0 or ncols <= 0:
+        raise ValueError("JBIG header contains non-positive matrix dimensions")
+    return nrows, ncols

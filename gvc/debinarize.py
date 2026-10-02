@@ -16,14 +16,16 @@ def tensor_to_matrix(tensor):
     matrix : ndarray
         a ndarray with dimension of 2
     """
-    assert(len(tensor.shape) == 3)
+    tensor = np.asarray(tensor)
+    if tensor.ndim != 3:
+        raise ValueError("tensor must be three-dimensional")
+    if tensor.shape[1] <= 0:
+        raise ValueError("tensor sample dimension must be positive")
 
     list_matrix = np.split(tensor, tensor.shape[1], axis=1)
-
     matrix = np.concatenate(list_matrix, axis=2).squeeze(axis=1)
-    
-    assert(np.issubdtype(matrix.dtype, tensor.dtype))
-    
+    if matrix.dtype != tensor.dtype:
+        raise RuntimeError("tensor-to-matrix conversion changed dtype")
     return matrix
 
 def simd_tensor_to_txt(allele_tensor, phasing_tensor):
@@ -31,10 +33,12 @@ def simd_tensor_to_txt(allele_tensor, phasing_tensor):
 
     max_val = allele_tensor.max()
     avail_allele_vals = '.' + "".join(np.arange(max_val+1).astype(str))
-    avail_phase_val = '/|'
+    avail_phase_val = '|/'
 
     if p == 1:
-        codebook = avail_allele_vals
+        # Keep one codebook entry per allele. np.array("...") would produce a
+        # scalar string and break indexed lookup for haploid genotypes.
+        codebook = list(avail_allele_vals)
     elif p > 1:
         codebook = ["".join(l) for l in it.product(avail_allele_vals, avail_phase_val, repeat=p-1)]
         codebook = ["".join(l) for l in it.product(codebook, avail_allele_vals)]
@@ -51,14 +55,23 @@ def simd_tensor_to_txt(allele_tensor, phasing_tensor):
 
     gt_matrix_str = np.empty((m,n), dtype='<U{}'.format(2*p))
 
-    index_mat = np.zeros(gt_matrix_str.shape, dtype=np.int)
+    index_mat = np.zeros(gt_matrix_str.shape, dtype=int)
     for k in range(1, p):
         allele_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k)
-        index_mat[complete_allele_mask] += allele_tensor[complete_allele_mask, k-1] * allele_factor
+        allele_values = allele_tensor[complete_allele_mask, k-1].astype(
+            np.int64, copy=False
+        )
+        index_mat[complete_allele_mask] += allele_values * allele_factor
         phase_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k-1)
-        index_mat[complete_allele_mask] += phasing_tensor[complete_allele_mask, k-1] * phase_factor
+        phase_values = phasing_tensor[complete_allele_mask, k-1].astype(
+            np.int64, copy=False
+        )
+        index_mat[complete_allele_mask] += phase_values * phase_factor
 
-    index_mat[complete_allele_mask] += allele_tensor[complete_allele_mask, -1]
+    final_alleles = allele_tensor[complete_allele_mask, -1].astype(
+        np.int64, copy=False
+    )
+    index_mat[complete_allele_mask] += final_alleles
     gt_matrix_str[complete_allele_mask] = np.array(codebook)[index_mat[complete_allele_mask]]
 
     if (flag_mask).any():
@@ -86,7 +99,7 @@ def matrix_to_tensor(matrix, num_matrix):
 
     return np.concatenate(list_matrix, axis=1)
 
-PHASING_VAL2CHAR = ['/', '|']
+PHASING_VAL2CHAR = ['|', '/']
 ALLELE_VAL2CHAR = np.arange(18).astype(object)
 ALLELE_VAL2CHAR[-2] = ''
 ALLELE_VAL2CHAR[-1] = '.'

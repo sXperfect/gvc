@@ -8,7 +8,6 @@ import itertools as it
 import gvc.common
 
 from .data_structures.consts import BinarizationID
-from . import cdebinarize
 from . import debinarize
 
 _phasing_dict = {
@@ -59,14 +58,17 @@ def _tensor_to_matrix(tensor):
     matrix : ndarray
         a ndarray with dimension of 2
     """
-    assert(len(tensor.shape) == 3)
+    tensor = np.asarray(tensor)
+    if tensor.ndim != 3:
+        raise ValueError("tensor must be three-dimensional")
+    if tensor.shape[1] <= 0:
+        raise ValueError("tensor sample dimension must be positive")
 
     list_matrix = np.split(tensor, tensor.shape[1], axis=1)
-
     matrix = np.concatenate(list_matrix, axis=2).squeeze(axis=1)
-    
-    assert(np.issubdtype(matrix.dtype, tensor.dtype))
-    
+
+    if matrix.dtype != tensor.dtype:
+        raise RuntimeError("tensor-to-matrix conversion changed dtype")
     return matrix
 
 def store_tensors_to_file(f, allele_tensor, phasing_tensor):
@@ -251,7 +253,7 @@ def reconstruct_genotype_matrix(allele_matrix, phasing_matrix, p):
         if isinstance(phasing_matrix, int):
             allele_tensor_shape = allele_tensor.shape
 
-            phasing_tensor = np.zeros((*allele_tensor_shape[:-1], p-1), dtype=np.bool)
+            phasing_tensor = np.zeros((*allele_tensor_shape[:-1], p-1), dtype=np.bool_)
             phasing_tensor[:, :, :] = phasing_matrix
 
         else:
@@ -265,9 +267,16 @@ def reconstruct_genotype_matrix(allele_matrix, phasing_matrix, p):
 
 def adaptive_max_value(allele_matrix):
 
+    allele_matrix = np.asarray(allele_matrix)
+    if allele_matrix.ndim not in (2, 3):
+        raise ValueError(
+            "allele data must be a two- or three-dimensional array"
+        )
+    if allele_matrix.size == 0:
+        raise ValueError("allele matrix must not be empty")
+    if not np.issubdtype(allele_matrix.dtype, np.signedinteger):
+        raise TypeError("allele matrix must use a signed integer dtype")
     allele_matrix = allele_matrix.copy()
-
-    assert(np.issubdtype(allele_matrix.dtype, np.signedinteger))
 
     dot_mask = allele_matrix == -1
     na_mask = allele_matrix == -2
@@ -327,7 +336,6 @@ def split_genotype_matrix(genotype_matrix: List[str]):
     p = np.max(p_candidates)
 
     allele_tensor = np.zeros([m, n, p], dtype=gvc.common.SIGNED_ALLELE_DTYPE)
-    assert(np.issubdtype(allele_tensor.dtype, np.signedinteger))
 
     if p-1 > 0:
         phasing_tensor = np.zeros([m, n, (p - 1)], dtype=gvc.common.PHASING_DTYPE)
@@ -358,7 +366,8 @@ def split_genotype_matrix(genotype_matrix: List[str]):
     for idx, bt in enumerate(binary_templates_str[1:],1):
         mask = genotype_matrix == bt
         allele_tensor[mask] = binary_templates_int[idx,:]
-        phasing_tensor[mask] = idx >= len(binary_phased)
+        if phasing_tensor is not None:
+            phasing_tensor[mask] = idx >= len(binary_phased)
         handle_later_mask[mask] = False # We don't need to handle these cases later!
 
 
@@ -382,8 +391,6 @@ def split_genotype_matrix(genotype_matrix: List[str]):
                             allele_tensor,
                             -2*np.ones([m, n, p_new - p], dtype=gvc.common.SIGNED_ALLELE_DTYPE)
                         ), axis=2)
-
-                        assert(np.issubdtype(allele_tensor.dtype, np.signedinteger))
 
                         additional_depth = np.zeros([m, n, p_new-p], dtype=bool)
                         if phasing_tensor is None:
@@ -417,8 +424,6 @@ def split_genotype_matrix(genotype_matrix: List[str]):
                             log.error('Could not parse row {}: {}'.format(i, genotype_matrix[i,:]))
                             raise ValueError('Could not parse row {}: {}'.format(i, genotype_matrix[i,:]))
 
-    assert(np.issubdtype(allele_tensor.dtype, np.signedinteger))
-
     if phasing_tensor is not None:
         return _tensor_to_matrix(allele_tensor), _tensor_to_matrix(phasing_tensor), p
     else:
@@ -444,9 +449,21 @@ def bin_bit_plane(matrix, axis=None, **kwargs):
     """
     log.debug('binarizing allele matrix using bit plane')
 
+    matrix = np.asarray(matrix)
+    if matrix.ndim != 2:
+        raise ValueError("bit-plane input must be a two-dimensional matrix")
+    if matrix.size == 0:
+        raise ValueError("bit-plane input must not be empty")
+    if not np.issubdtype(matrix.dtype, np.integer):
+        raise TypeError("bit-plane input must contain integers")
+    if np.any(matrix < 0):
+        raise ValueError("bit-plane input must be non-negative")
+    if axis not in (0, 1, 2):
+        raise ValueError("bit-plane axis must be 0, 1, or 2")
+
     bit_planes = []
 
-    bit_depth = np.ceil(np.log2(matrix.max() + 1)).astype(gvc.common.ALLELE_DTYPE)
+    bit_depth = max(1, int(np.ceil(np.log2(int(matrix.max()) + 1))))
 
     for i_bit in range(bit_depth):
         bit_tensor = np.bitwise_and(matrix, int(2**i_bit)).astype(gvc.common.BIN_DTYPE)
@@ -460,27 +477,42 @@ def bin_bit_plane(matrix, axis=None, **kwargs):
             bin_matrices = bit_planes
         else:
             log.error('Invalid axis: {}'.format(axis))
-            raise gvc.errors.GvcError()
+            raise ValueError("invalid binarization argument")
     else:
         bin_matrices = bit_planes
 
     return bin_matrices, bit_depth
 
 def debin_bit_plane(bin_matrices, bit_depth, axis):
+    if (
+        not isinstance(bit_depth, int)
+        or isinstance(bit_depth, bool)
+        or bit_depth <= 0
+    ):
+        raise ValueError("bit_depth must be a positive integer")
+    if axis not in (0, 1, 2):
+        raise ValueError("bit-plane axis must be 0, 1, or 2")
 
-    if axis < 2:
-        assert len(bin_matrices) == 1
-
-        bit_planes = np.split(bin_matrices[0], bit_depth, axis)
-
-    elif axis == 2 :
-        bit_planes = bin_matrices
-
+    if axis in (0, 1):
+        if len(bin_matrices) != 1:
+            raise ValueError(
+                "concatenated bit-plane payload must contain one matrix"
+            )
+        try:
+            bit_planes = np.split(bin_matrices[0], bit_depth, axis)
+        except ValueError as exc:
+            raise ValueError(
+                "concatenated bit-plane dimension is not divisible by bit_depth"
+            ) from exc
     else:
-        log.error('Invalid axis: {}'.format(axis))
-        raise gvc.errors.GvcError()
+        bit_planes = list(bin_matrices)
 
-    assert bit_depth == len(bit_planes)
+    if len(bit_planes) != bit_depth:
+        raise ValueError(
+            "bit-plane count does not match bit_depth: {} != {}".format(
+                len(bit_planes), bit_depth
+            )
+        )
 
     matrix = bit_planes[0].astype(gvc.common.ALLELE_DTYPE)
     for i in range(1, bit_depth):
@@ -508,9 +540,19 @@ def bin_row_bin_split(matrix, **kwargs):
 
     log.debug('binarizing allele matrix by row splitting')
 
+    matrix = np.asarray(matrix)
+    if matrix.ndim != 2:
+        raise ValueError("row-bin-split input must be two-dimensional")
+    if matrix.size == 0:
+        raise ValueError("row-bin-split input must not be empty")
+    if not np.issubdtype(matrix.dtype, np.integer):
+        raise TypeError("row-bin-split input must contain integers")
+    if np.any(matrix < 0):
+        raise ValueError("row-bin-split input must be non-negative")
+
     nrow = matrix.shape[0]
 
-    bitlen_vect = np.max(matrix, axis=1).astype(np.uint)
+    bitlen_vect = np.max(matrix, axis=1).astype(np.uint64)
     # Force max value 0 to 1
     bitlen_vect[bitlen_vect == 0] = 1
 
@@ -518,9 +560,9 @@ def bin_row_bin_split(matrix, **kwargs):
     log.debug("Greatest value in the block: {}".format(bitlen_vect.max()))
 
     bitlen_vect = np.ceil(np.log2(bitlen_vect + 1)).astype(np.uint16)
-    bin_mat_nrows = np.sum(bitlen_vect).astype(np.uint)
+    bin_mat_nrows = int(np.sum(bitlen_vect))
     bin_mat_shape = (bin_mat_nrows, matrix.shape[1])
-    bin_mat = np.zeros(bin_mat_shape, dtype=np.bool)
+    bin_mat = np.zeros(bin_mat_shape, dtype=np.bool_)
 
     i_b = 0  # row id in bin_mat
     for i in range(nrow):  # iterate over rows in matrix
@@ -528,7 +570,7 @@ def bin_row_bin_split(matrix, **kwargs):
         bitlen = bitlen_vect[i]
 
         for i_bit in range(bitlen):
-            bin_mat[i_b + i_bit] = np.bitwise_and(matrix[i, :], int(2**i_bit)).astype(np.bool)
+            bin_mat[i_b + i_bit] = np.bitwise_and(matrix[i, :], int(2**i_bit)).astype(np.bool_)
 
         i_b += bitlen
 
@@ -537,7 +579,7 @@ def bin_row_bin_split(matrix, **kwargs):
 def debin_row_bin_split(bin_matrices, bitlen_vect, **kwargs):
 
     try:
-        if isinstance(bin_matrices, List):
+        if isinstance(bin_matrices, list):
             bin_mat = bin_matrices[0]
         elif isinstance(bin_matrices, np.ndarray) and bin_matrices.ndim == 1:
             bin_mat = bin_matrices[0]
@@ -629,7 +671,7 @@ def binarize_allele_matrix(
 
     bin_matrices, additional_info = binarizer(matrix, axis=axis)
     
-    if not isinstance(bin_matrices, List):
+    if not isinstance(bin_matrices, list):
         bin_matrices = [bin_matrices]
 
     return bin_matrices, additional_info

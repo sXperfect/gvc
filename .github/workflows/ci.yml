@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+    types: ["opened", "synchronize", "reopened", "ready_for_review"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  py38-reviewed:
+    name: Python 3.8 reviewed stack
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install JBIG-KIT release dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jbigkit-bin
+          command -v pbmtojbg85
+          command -v jbgtopbm85
+
+      - name: Fetch pinned LUH historical fixture
+        run: |
+          mkdir -p tmp/historical
+          curl --fail --location --retry 3 \
+            https://raw.githubusercontent.com/tnt-LUH/gvc/f9af2127a2ff0b87727924860e33f1905fd507cd/tests/test_block01.vcf.gz \
+            --output tmp/historical/test_block01.vcf.gz
+          test "$(git hash-object tmp/historical/test_block01.vcf.gz)" = \
+            "af45a419e46563906ac51fad0be869291316cea9"
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Verify reviewed Python 3.8 latest stack
+        run: |
+          python -m pip install --upgrade "pip<25.1"
+          PIP_CONSTRAINT=ci/constraints/py38-latest.txt \
+            python -m pip install --only-binary=:all: --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python -m pip check
+          python scripts/check_py38_latest.py
+          GVC_REQUIRE_JBIGKIT=1 \
+          GVC_HISTORICAL_FIXTURE="$PWD/tmp/historical/test_block01.vcf.gz" \
+          GVC_HISTORICAL_MAX_BLOCKS=1 \
+            python scripts/ci.py all
+          python benchmarks/run_release.py \
+            tests/fixtures/tiny_diploid.vcf \
+            --workers 0 2 \
+            --repetitions 1 \
+            --block-size 1 \
+            --output tmp/benchmark-smoke.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          report = json.loads(Path("tmp/benchmark-smoke.json").read_text())
+          assert report["schema_version"] == 1
+          assert len(report["configurations"]) == 2
+          for config in report["configurations"]:
+              assert config["variants"] == 3
+              assert config["encode_seconds"] >= 0
+              assert config["decode_seconds"] >= 0
+              assert config["total_gvc_bytes"] > 0
+              assert config["decoded_gt_bytes"] > 0
+              assert config["decoded_gt_to_total_gvc_ratio"] > 0
+              assert config["peak_rss_kib_self"] > 0
+          PY
+          python scripts/ci.py optional
+
+  py38-resolver:
+    name: Python 3.8 resolver drift
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Verify Python 3.8 resolver has not moved
+        run: |
+          python -m pip install --upgrade "pip<25.1"
+          python -m pip install --only-binary=:all: --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python -m pip check
+          python scripts/check_py38_latest.py
+          python -m pytest
+          python scripts/ci.py optional
+
+  compatibility:
+    name: Python ${{ matrix.python }}
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install current stack
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade --upgrade-strategy eager -e ".[test,all]"
+
+      - name: Run compatibility checks
+        run: |
+          case "${{ matrix.python }}" in
+            3.10|3.12|3.14)
+              python scripts/ci.py metadata
+              python scripts/ci.py syntax
+              python scripts/ci.py native
+              python scripts/ci.py test
+              python scripts/ci.py cli
+              python scripts/ci.py deps
+              python scripts/ci.py optional
+              ;;
+            *)
+              python scripts/ci.py test
+              python scripts/ci.py optional
+              python scripts/ci.py deps
+              ;;
+          esac

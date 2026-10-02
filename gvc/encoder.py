@@ -3,6 +3,10 @@ import typing as t
 import copy as cp
 import logging as log
 import multiprocessing as mp
+import os
+import pickle
+import queue
+import uuid
 
 import gvc.common
 from . import data_structures as ds
@@ -10,6 +14,19 @@ from . import reader
 from .binarization import binarize_allele_matrix, BINARIZATION_STR2ID
 from .sort import sort
 from .codec import CODEC_STR2ID, encode
+from .dist import DIST_FUNC
+from .solver import SOLVERS
+from .multiprocessing import (
+    EncodedBlock,
+    EncodeProcessSupervisor,
+    Progress,
+    ReaderDone,
+    StopWork,
+    WorkItem,
+    WorkerDone,
+    WriterDone,
+)
+from .multiprocessing.supervisor import child_entry
 
 def run_core(
     raw_block:t.List, 
@@ -149,54 +166,204 @@ def run_no_threads(
             log.info('Store the remaining blocks')
             gvc.common.store_access_unit(output_f, acc_unit_id, ac_unit_param_set, blocks)
             
+def _queue_put(target_queue, item, stop_event, timeout=0.2):
+    while not stop_event.is_set():
+        try:
+            target_queue.put(item, timeout=timeout)
+            return True
+        except queue.Full:
+            continue
+    return False
+
+
+def _queue_get(source_queue, stop_event, timeout=0.2):
+    while not stop_event.is_set():
+        try:
+            return source_queue.get(timeout=timeout)
+        except queue.Empty:
+            continue
+    return None
+
+
+def _validate_parallel_output_path(output_fpath):
+    output_path = os.path.abspath(output_fpath)
+    parent = os.path.dirname(output_path) or os.getcwd()
+    if not os.path.exists(parent):
+        raise FileNotFoundError(
+            "output directory does not exist: {}".format(parent)
+        )
+    if not os.path.isdir(parent):
+        raise NotADirectoryError(
+            "output parent is not a directory: {}".format(parent)
+        )
+    if os.path.isdir(output_path):
+        raise IsADirectoryError(
+            "output path is a directory: {}".format(output_path)
+        )
+
+    metadata_path = output_path + ".metadata"
+    if os.path.exists(metadata_path) and not os.path.isdir(metadata_path):
+        raise NotADirectoryError(
+            "metadata sidecar path is not a directory: {}".format(
+                metadata_path
+            )
+        )
+    return output_path
+
+
+def _temp_output_path(output_fpath):
+    return "{}.tmp.{}.{}".format(
+        output_fpath,
+        os.getpid(),
+        uuid.uuid4().hex,
+    )
+
+
+class _BlockProcessingError(RuntimeError):
+    def __init__(self, block_id, message):
+        self.block_id = block_id
+        super().__init__(message)
+
+
 def run_multiprocessing(
-    input_fpath:str,
+    input_fpath,
     output_fpath,
     block_size,
     ps_params,
     tsp_params,
-    num_processes
+    num_processes,
+    start_method=None,
+    stall_timeout=None,
+    process_initializer=None,
+    process_initializer_args=(),
 ):
+    if not isinstance(num_processes, int) or isinstance(num_processes, bool):
+        raise TypeError("num_processes must be an integer")
+    if num_processes < 1:
+        raise ValueError("num_processes must be positive")
 
-    lock_A = mp.Lock()
-    queue_A = mp.Queue()
+    output_fpath = _validate_parallel_output_path(output_fpath)
 
-    lock_B = mp.Lock()
-    queue_B = mp.Queue()
+    if process_initializer is not None and not callable(process_initializer):
+        raise TypeError("process_initializer must be callable or None")
+    if process_initializer_args is None:
+        process_initializer_args = ()
+    else:
+        process_initializer_args = tuple(process_initializer_args)
 
-    procs = []
-
-    procs.append(
-        mp.Process(
-            name="Reader",
-            target=worker_reader, 
-            args=(lock_A, queue_A, input_fpath, output_fpath, block_size),
-             kwargs={'buffer_size' : num_processes*2})
+    context = (
+        mp.get_context(start_method)
+        if start_method is not None
+        else mp.get_context()
     )
-    
-    for i_worker in range(num_processes):
-        log.info('Add encoder worker {}'.format(i_worker))
+    effective_start_method = context.get_start_method()
+    if (
+        effective_start_method in ("spawn", "forkserver")
+        and process_initializer is not None
+    ):
+        try:
+            pickle.dumps((process_initializer, process_initializer_args))
+        except Exception as exc:
+            raise TypeError(
+                "{} process_initializer and arguments must be picklable".format(
+                    effective_start_method
+                )
+            ) from exc
+    work_q = context.Queue(maxsize=max(1, num_processes * 2))
+    result_q = context.Queue(maxsize=max(1, num_processes * 2))
+    error_q = context.Queue()
+    status_q = context.Queue()
+    stop_event = context.Event()
 
-        procs.append(
-            mp.Process(
-                name="Encoder{:02d}".format(i_worker),
-                target=worker_encoder, 
-                args=(lock_A, queue_A, lock_B, queue_B, ps_params, tsp_params))
+    temp_output = _temp_output_path(output_fpath)
+
+    reader_proc = context.Process(
+        name="GVC-Reader",
+        target=child_entry,
+        args=(
+            "reader",
+            None,
+            error_q,
+            stop_event,
+            worker_reader,
+            (
+                work_q,
+                status_q,
+                stop_event,
+                input_fpath,
+                temp_output,
+                block_size,
+                num_processes,
+            ),
+            None,
+            (),
+        ),
+    )
+    reader_proc._gvc_stage = "reader"
+    reader_proc._gvc_worker_id = None
+
+    encoder_procs = []
+    for worker_id in range(num_processes):
+        proc = context.Process(
+            name="GVC-Encoder{:02d}".format(worker_id),
+            target=child_entry,
+            args=(
+                "encoder",
+                worker_id,
+                error_q,
+                stop_event,
+                worker_encoder,
+                (
+                    worker_id,
+                    work_q,
+                    result_q,
+                    status_q,
+                    stop_event,
+                    ps_params,
+                    tsp_params,
+                ),
+                process_initializer,
+                process_initializer_args,
+            ),
         )
+        proc._gvc_stage = "encoder"
+        proc._gvc_worker_id = worker_id
+        encoder_procs.append(proc)
 
-    procs.append(
-        mp.Process(
-            name="Writer",
-            target=worker_writer, 
-            args=(lock_B, queue_B, output_fpath), 
-            kwargs={'num_processes' : num_processes})
+    writer_proc = context.Process(
+        name="GVC-Writer",
+        target=child_entry,
+        args=(
+            "writer",
+            None,
+            error_q,
+            stop_event,
+            worker_writer,
+            (
+                result_q,
+                status_q,
+                stop_event,
+                temp_output,
+                num_processes,
+            ),
+            None,
+            (),
+        ),
     )
+    writer_proc._gvc_stage = "writer"
+    writer_proc._gvc_worker_id = None
 
-    for p in procs:
-        p.start()
-
-    for p in procs:
-        p.join()
+    supervisor = EncodeProcessSupervisor(
+        processes=[reader_proc] + encoder_procs + [writer_proc],
+        error_q=error_q,
+        status_q=status_q,
+        stop_event=stop_event,
+        queues=[work_q, result_q],
+        temp_output=temp_output,
+        final_output=output_fpath,
+        stall_timeout=stall_timeout,
+    )
+    return supervisor.run()
 
 class Encoder(object):
 
@@ -212,26 +379,105 @@ class Encoder(object):
         max_cols=None,
         dist='ham',
         solver='nn',
-        codec_name:str="jbig1",
+        codec_name:str="jbig",
         preset_mode=1,
         num_threads=0,
+        multiprocessing_start_method=None,
+        multiprocessing_stall_timeout=None,
+        multiprocessing_initializer=None,
+        multiprocessing_initializer_args=(),
     ):
 
-        self.input_fpath = input_fpath
-        self.output_fpath = output_fpath
+        self.input_fpath = os.fspath(input_fpath)
+        self.output_fpath = os.fspath(output_fpath)
+
+        if not (
+            self.input_fpath.endswith(".vcf")
+            or self.input_fpath.endswith(".vcf.gz")
+        ):
+            raise ValueError(
+                "input must be a .vcf or .vcf.gz file: {}".format(
+                    self.input_fpath
+                )
+            )
+
+        if binarization_name not in BINARIZATION_STR2ID:
+            raise ValueError(
+                "unknown binarization {!r}; expected one of {}".format(
+                    binarization_name,
+                    sorted(BINARIZATION_STR2ID),
+                )
+            )
+        if codec_name not in CODEC_STR2ID:
+            raise ValueError(
+                "unknown codec {!r}; expected one of {}".format(
+                    codec_name,
+                    sorted(CODEC_STR2ID),
+                )
+            )
+        if not isinstance(axis, int) or isinstance(axis, bool) or axis not in (0, 1, 2):
+            raise ValueError("axis must be 0, 1, or 2")
+        if not isinstance(block_size, int) or isinstance(block_size, bool):
+            raise TypeError("block_size must be an integer")
+        if block_size <= 0:
+            raise ValueError("block_size must be positive")
+        if not isinstance(num_threads, int) or isinstance(num_threads, bool):
+            raise TypeError("num_threads must be an integer")
+        if num_threads < 0:
+            raise ValueError("num_threads must be non-negative")
+        if solver not in SOLVERS:
+            raise ValueError(
+                "unknown solver {!r}; expected one of {}".format(
+                    solver, sorted(SOLVERS)
+                )
+            )
+        if dist not in DIST_FUNC:
+            raise ValueError(
+                "unknown distance function {!r}; expected one of {}".format(
+                    dist, sorted(DIST_FUNC)
+                )
+            )
+        if (
+            not isinstance(preset_mode, int)
+            or isinstance(preset_mode, bool)
+            or preset_mode not in (0, 1, 2)
+        ):
+            raise ValueError("preset_mode must be 0, 1, or 2")
+        if multiprocessing_start_method is not None:
+            if multiprocessing_start_method not in mp.get_all_start_methods():
+                raise ValueError(
+                    "unsupported multiprocessing start method: {}".format(
+                        multiprocessing_start_method
+                    )
+                )
+        if multiprocessing_stall_timeout is not None:
+            multiprocessing_stall_timeout = float(
+                multiprocessing_stall_timeout
+            )
+            if multiprocessing_stall_timeout <= 0:
+                raise ValueError(
+                    "multiprocessing_stall_timeout must be positive"
+                )
+        if (
+            multiprocessing_initializer is not None
+            and not callable(multiprocessing_initializer)
+        ):
+            raise TypeError(
+                "multiprocessing_initializer must be callable or None"
+            )
 
         # Parameter Set
         self.binarization_id = BINARIZATION_STR2ID[binarization_name]
         self.codec_id = CODEC_STR2ID[codec_name]
         self.axis = axis
-        self.sort_cols = sort_cols
-        self.sort_rows = sort_rows
-        self.transpose = transpose
+        self.sort_cols = bool(sort_cols)
+        self.sort_rows = bool(sort_rows)
+        self.transpose = bool(transpose)
 
         # Binarization parameter (additional)
         self.block_size = block_size
         self.max_cols = max_cols
-        
+
         # Parameter for sorting process
         self.dist = dist
         self.solver = solver
@@ -239,6 +485,12 @@ class Encoder(object):
         # Additional parameter
         self.preset_mode = preset_mode
         self.num_threads = num_threads
+        self.multiprocessing_start_method = multiprocessing_start_method
+        self.multiprocessing_stall_timeout = multiprocessing_stall_timeout
+        self.multiprocessing_initializer = multiprocessing_initializer
+        self.multiprocessing_initializer_args = tuple(
+            multiprocessing_initializer_args or ()
+        )
         
     @property
     def ps_params(self):
@@ -279,6 +531,10 @@ class Encoder(object):
                 self.ps_params,
                 self.tsp_params,
                 self.num_threads,
+                start_method=self.multiprocessing_start_method,
+                stall_timeout=self.multiprocessing_stall_timeout,
+                process_initializer=self.multiprocessing_initializer,
+                process_initializer_args=self.multiprocessing_initializer_args,
             )
 
         else:
@@ -288,204 +544,214 @@ class Encoder(object):
         log.debug('Encoding complete')
 
 
-def worker_reader(lock_A, queue_A, input_fpath, output_fpath, block_size, buffer_size=1):
+def worker_reader(
+    work_q,
+    status_q,
+    stop_event,
+    input_fpath,
+    output_fpath,
+    block_size,
+    num_processes,
+):
+    if not (
+        input_fpath.endswith(".vcf")
+        or input_fpath.endswith(".vcf.gz")
+    ):
+        raise ValueError("Invalid Format")
 
-    if input_fpath.endswith('.vcf') or input_fpath.endswith('vcf.gz'):
-        iterator = gvc.reader.vcf_genotypes_reader(input_fpath, output_fpath, block_size)
-    else:
-        raise ValueError('Invalid Format')
+    iterator = gvc.reader.vcf_genotypes_reader(
+        input_fpath, output_fpath, block_size
+    )
+    total_blocks = 0
+    for block_id, raw_block in enumerate(iterator):
+        if stop_event.is_set():
+            return
+        item = WorkItem(block_id, cp.copy(raw_block))
+        if not _queue_put(work_q, item, stop_event):
+            return
+        total_blocks += 1
+        _queue_put(
+            status_q,
+            Progress("reader", total_blocks),
+            stop_event,
+        )
 
-    for block_ID, raw_block in enumerate(iterator):        
-        log.info('Adding block {} with size {}'.format(block_ID, raw_block[0].shape[0]))
-        wait = True
+    for _ in range(num_processes):
+        if not _queue_put(work_q, StopWork(), stop_event):
+            return
+    _queue_put(status_q, ReaderDone(total_blocks), stop_event)
 
-        while wait:
-            lock_A.acquire()
 
-            try:
-                if queue_A.qsize() < buffer_size:
-                    queue_A.put(
-                        [block_ID, cp.copy(raw_block)]
-                    )
-                    block_ID += 1
-
-                    wait = False
-            finally:
-                lock_A.release()
-
-    #? Send kill message
-    wait = True
-    while wait:
-        lock_A.acquire()
+def worker_encoder(
+    worker_id,
+    work_q,
+    result_q,
+    status_q,
+    stop_event,
+    ps_params,
+    tsp_params,
+):
+    processed_blocks = 0
+    while not stop_event.is_set():
+        item = _queue_get(work_q, stop_event)
+        if item is None:
+            return
+        if isinstance(item, StopWork):
+            _queue_put(result_q, WorkerDone(worker_id), stop_event)
+            return
+        if not isinstance(item, WorkItem):
+            raise TypeError(
+                "unexpected work-queue message: {}".format(type(item).__name__)
+            )
 
         try:
-            if queue_A.qsize() < buffer_size:
-                queue_A.put(
-                    [-1, None]
-                )
-                wait = False
-        finally:
-            lock_A.release()
+            block, new_param_set = run_core(
+                item.raw_block, ps_params, tsp_params
+            )
+        except BaseException as exc:
+            raise _BlockProcessingError(
+                item.block_id, str(exc)
+            ) from exc
 
-    log.debug('Stop')
+        if not _queue_put(
+            result_q,
+            EncodedBlock(item.block_id, new_param_set, block),
+            stop_event,
+        ):
+            return
+        processed_blocks += 1
+        _queue_put(
+            status_q,
+            Progress(
+                "encoder[{}]".format(worker_id),
+                processed_blocks,
+            ),
+            stop_event,
+        )
 
-def worker_encoder(lock_A, queue_A, lock_B, queue_B, ps_params, tsp_params):
 
-    running = True
-    while running:
-        get_data = True
-        while get_data:
-            lock_A.acquire()
+def _store_ordered_block(
+    output_f,
+    block,
+    new_param_set,
+    state,
+):
+    max_num_blocks = 2 ** (ds.consts.NUM_BLOCKS_LEN * 8) - 1
+    ac_unit_param_set = state["parameter_set"]
+    blocks = state["blocks"]
+    param_sets = state["parameter_sets"]
 
-            try:
-                if queue_A.qsize() > 0:
-                    block_ID, raw_block = queue_A.get()
-                    get_data = False
+    if ac_unit_param_set is None:
+        ac_unit_param_set = new_param_set
+        param_sets.append(ac_unit_param_set)
+        output_f.write(ac_unit_param_set.to_bytes())
 
-                    if block_ID == -1:
-                        queue_A.put([-1, None])
-            finally:
-                lock_A.release()
-        
-        if block_ID == -1:
+    elif new_param_set != ac_unit_param_set or len(blocks) == max_num_blocks:
+        gvc.common.store_access_unit(
+            output_f,
+            state["access_unit_id"],
+            ac_unit_param_set,
+            blocks,
+        )
+        state["access_unit_id"] += 1
+        blocks.clear()
 
-            lock_B.acquire()
-            try:
-                queue_B.put([-1, None, None])
-            finally:
-                lock_B.release()
-
-            running = False
+        stored_match = next(
+            (stored for stored in param_sets if stored == new_param_set),
+            None,
+        )
+        if stored_match is None:
+            new_param_set.parameter_set_id = len(param_sets)
+            ac_unit_param_set = new_param_set
+            param_sets.append(ac_unit_param_set)
+            output_f.write(ac_unit_param_set.to_bytes())
         else:
-            block, new_param_set = run_core(raw_block, ps_params, tsp_params)            
+            ac_unit_param_set = stored_match
 
-            lock_B.acquire()
-            try:
-                queue_B.put(
-                    [block_ID, new_param_set, block]
+    blocks.append(block)
+    state["parameter_set"] = ac_unit_param_set
+
+
+def worker_writer(
+    result_q,
+    status_q,
+    stop_event,
+    output_fpath,
+    num_processes,
+):
+    if num_processes < 1:
+        raise ValueError("num_processes must be positive")
+
+    state = {
+        "parameter_set": None,
+        "access_unit_id": 0,
+        "blocks": [],
+        "parameter_sets": [],
+    }
+    pending = {}
+    next_block_id = 0
+    stopped_workers = 0
+    written_blocks = 0
+
+    with open(output_fpath, "wb") as output_f:
+        while (
+            stopped_workers < num_processes
+            and not stop_event.is_set()
+        ):
+            item = _queue_get(result_q, stop_event)
+            if item is None:
+                return
+
+            if isinstance(item, WorkerDone):
+                stopped_workers += 1
+                continue
+            if not isinstance(item, EncodedBlock):
+                raise TypeError(
+                    "unexpected result-queue message: {}".format(
+                        type(item).__name__
+                    )
                 )
-            finally:
-                lock_B.release()
 
-    log.debug('Stop')
+            block_id = item.block_id
+            if block_id in pending or block_id < next_block_id:
+                raise ValueError(
+                    "duplicate or stale encoded block id {}".format(block_id)
+                )
+            pending[block_id] = (item.parameter_set, item.block)
 
-def worker_writer(lock_B, queue_B, output_fpath, num_processes=0):
-    acc_unit_param_set = None  # Act as pointer, pointing to parameter set of current AccessUnit
-    acc_unit_id = 0
-    blocks = []
-    param_sets = []
+            while next_block_id in pending:
+                current_param_set, current_block = pending.pop(next_block_id)
+                _store_ordered_block(
+                    output_f,
+                    current_block,
+                    current_param_set,
+                    state,
+                )
+                next_block_id += 1
+                written_blocks += 1
+                _queue_put(
+                    status_q,
+                    Progress("writer", written_blocks),
+                    stop_event,
+                )
 
-    max_num_blocks_per_acc_unit = 2**(ds.consts.NUM_BLOCKS_LEN * 8) - 1
+        if stop_event.is_set():
+            return
+        if pending:
+            raise RuntimeError(
+                "missing encoded block before block {}".format(min(pending))
+            )
 
-    curr_block_ID = 0
-    block_dict = {}
-    num_killed = 0
+        if state["blocks"]:
+            gvc.common.store_access_unit(
+                output_f,
+                state["access_unit_id"],
+                state["parameter_set"],
+                state["blocks"],
+            )
+        output_f.flush()
+        os.fsync(output_f.fileno())
 
-    with open(output_fpath, 'wb') as output_f:
+    _queue_put(status_q, WriterDone(written_blocks), stop_event)
+    log.info("Stop")
 
-        running = True
-        retrieve_new_data = True
-        while running:
-        
-            if retrieve_new_data:
-                get_data = True
-                log.info('Retrieving block')
-                while get_data:
-                    lock_B.acquire()
-
-                    try:
-                        if queue_B.qsize():
-                            block_ID, block_param_set, block_payload = queue_B.get()
-
-                            get_data = False
-
-                    finally:
-                        lock_B.release()
-
-                if block_ID == -1:
-                    num_killed += 1
-                    log.debug('Number of processes killed {}'.format(num_killed))
-
-                    if num_killed >= num_processes:
-                        log.debug('All workers are killed')
-
-                        retrieve_new_data = False
-                        # break
-                else:
-                    log.info('Storing block')
-                    block_dict[block_ID] = [block_param_set, block_payload]
-
-            if curr_block_ID in block_dict:
-                log.info('Writing block {}'.format(curr_block_ID))
-
-                new_param_set, block = block_dict[curr_block_ID]
-                del block_dict[curr_block_ID]
-                curr_block_ID += 1
-                
-                # If parameter set of current block different from parameter set of current access unit,
-                # store blocks as access unit
-                if acc_unit_param_set is None:
-                    log.debug('Parameter set of access unit is None -> set to new parameter set')
-                    acc_unit_param_set = new_param_set
-                    param_sets.append(acc_unit_param_set)
-                    output_f.write(acc_unit_param_set.to_bytes())
-
-                elif new_param_set != acc_unit_param_set or len(blocks) == max_num_blocks_per_acc_unit:
-                    log.debug('Parameter set and parameter set of current access unit is different')
-
-                    # Store blocks as an Access Unit
-                    log.debug('Store access unit ID {:03d}, num blocks: {:d}'.format(acc_unit_id, len(blocks)))
-                    gvc.common.store_access_unit(output_f, acc_unit_id, acc_unit_param_set, blocks)
-
-                    # Initialize values for the new AccessUnit
-                    acc_unit_id += 1
-                    blocks.clear()
-
-                    # Check if similar parameter set is already created before                       
-                    is_param_set_unique = True
-                    for stored_param_set in param_sets:
-                        if stored_param_set == new_param_set:
-                            is_param_set_unique = False
-                            break
-                    
-                    # If parameter set is unique, store in list of parameter sets and store in GVC file
-                    if is_param_set_unique:
-                        log.debug('New parameter set is unique')
-                        new_param_set.parameter_set_id = len(param_sets)
-
-                        acc_unit_param_set = new_param_set
-
-                        param_sets.append(acc_unit_param_set)
-                        output_f.write(acc_unit_param_set.to_bytes())
-
-                    else:
-                        log.debug('New parameter set is not unique')
-                        del new_param_set
-                        acc_unit_param_set = stored_param_set
-
-                blocks.append(block)
-
-            if len(block_dict) == 0 and not retrieve_new_data:
-                log.info("No new block available")
-                running = False
-
-        if len(blocks):
-            lock_B.acquire()
-
-            try:
-                qsize = queue_B.qsize()
-
-            finally:
-                lock_B.release()
-
-            log.debug("QueueB qsize: {}".format(qsize))
-            log.debug("Dict: {}".format(block_dict))
-            log.debug("Dict size: {}".format(len(block_dict)))
-            log.debug("curr_block_ID:{}".format(curr_block_ID))
-
-            # Store the remaining blocks
-            log.info('Store the remaining blocks')
-            log.debug('Store access unit ID {:03d}, num blocks: {:d}'.format(acc_unit_id, len(blocks)))
-            gvc.common.store_access_unit(output_f, acc_unit_id, acc_unit_param_set, blocks)
-
-    log.info('Stop')

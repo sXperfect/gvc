@@ -1,0 +1,159 @@
+name: Release validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      historical_max_blocks:
+        description: "Historical blocks per case (0 = full fixture)"
+        required: true
+        default: "0"
+      repetitions:
+        description: "Benchmark repetitions"
+        required: true
+        default: "3"
+      workers:
+        description: "Space-separated benchmark worker counts"
+        required: true
+        default: "0 1 2 4"
+      include_sorting:
+        description: "Exercise all historical row/column sorting combinations"
+        required: true
+        type: boolean
+        default: false
+      rc_mode:
+        description: "Require RC/final version and validate release artifacts"
+        required: true
+        type: boolean
+        default: false
+      baseline_url:
+        description: "Optional trusted benchmark baseline URL"
+        required: false
+        default: ""
+      baseline_sha256:
+        description: "Required SHA-256 when baseline_url is supplied"
+        required: false
+        default: ""
+      max_regression_percent:
+        description: "Optional accepted benchmark regression budget"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install JBIG-KIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends jbigkit-bin
+
+      - name: Fetch pinned LUH historical fixture
+        run: |
+          mkdir -p tmp/historical
+          curl --fail --location --retry 3 \
+            https://raw.githubusercontent.com/tnt-LUH/gvc/f9af2127a2ff0b87727924860e33f1905fd507cd/tests/test_block01.vcf.gz \
+            --output tmp/historical/test_block01.vcf.gz
+          test "$(git hash-object tmp/historical/test_block01.vcf.gz)" = \
+            "af45a419e46563906ac51fad0be869291316cea9"
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install reviewed Python 3.8 stack
+        run: |
+          python -m pip install --upgrade "pip<25.1"
+          PIP_CONSTRAINT=ci/constraints/py38-latest.txt \
+            python -m pip install --only-binary=:all: --upgrade --upgrade-strategy eager -e ".[test,all]"
+          python -m pip check
+          python scripts/check_py38_latest.py
+
+      - name: Fetch trusted benchmark baseline
+        if: ${{ inputs.baseline_url != '' }}
+        env:
+          BASELINE_URL: ${{ inputs.baseline_url }}
+          BASELINE_SHA256: ${{ inputs.baseline_sha256 }}
+        run: |
+          test -n "$BASELINE_SHA256" || {
+            echo "baseline_sha256 is required with baseline_url" >&2
+            exit 2
+          }
+          mkdir -p tmp/release-validation
+          curl --fail --location --retry 3 "$BASELINE_URL" \
+            --output tmp/release-validation/baseline.json
+          echo "$BASELINE_SHA256  tmp/release-validation/baseline.json" | sha256sum -c -
+
+      - name: Run controlled release validation
+        env:
+          GVC_REQUIRE_JBIGKIT: "1"
+          HISTORICAL_MAX_BLOCKS: ${{ inputs.historical_max_blocks }}
+          INCLUDE_SORTING: ${{ inputs.include_sorting }}
+          RC_MODE: ${{ inputs.rc_mode }}
+          REPEATS: ${{ inputs.repetitions }}
+          WORKERS: ${{ inputs.workers }}
+          BASELINE_URL: ${{ inputs.baseline_url }}
+          MAX_REGRESSION_PERCENT: ${{ inputs.max_regression_percent }}
+        run: |
+          read -r -a worker_args <<< "$WORKERS"
+          args=(
+            tmp/historical/test_block01.vcf.gz
+            --benchmark-output tmp/release-validation/benchmark.json
+            --evidence-output tmp/release-validation/evidence.json
+            --historical-max-blocks "$HISTORICAL_MAX_BLOCKS"
+            --repetitions "$REPEATS"
+            --workers "${worker_args[@]}"
+          )
+          if [ "$INCLUDE_SORTING" = "true" ]; then
+            args+=(--include-sorting)
+          fi
+          if [ "$RC_MODE" = "true" ]; then
+            args+=(--rc)
+          fi
+          if [ -n "$BASELINE_URL" ]; then
+            args+=(--baseline tmp/release-validation/baseline.json)
+          fi
+          if [ -n "$MAX_REGRESSION_PERCENT" ]; then
+            args+=(--max-regression-percent "$MAX_REGRESSION_PERCENT")
+          fi
+          python scripts/run_release_validation.py "${args[@]}"
+
+      - name: Upload validation evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gvc-release-validation-${{ github.sha }}
+          path: |
+            tmp/release-validation/benchmark.json
+            tmp/release-validation/evidence.json
+            tmp/release-validation/comparison.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload RC artifacts
+        if: ${{ inputs.rc_mode }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gvc-release-artifacts-${{ github.sha }}
+          path: |
+            tmp/release-validation/artifacts.json
+            tmp/release-validation/dist/*
+          if-no-files-found: error
+          retention-days: 30

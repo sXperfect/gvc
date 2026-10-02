@@ -1,7 +1,7 @@
-numpy==1.21
-cython==0.29.30
-numba
-cyvcf2
-scipy
-tspsolve
-Pillow
+# Full-feature compatibility install for legacy workflows.
+# Canonical dependency metadata lives in pyproject.toml.
+numpy>=1.24.4,<3
+scipy>=1.10.1,<2
+cyvcf2>=0.33.0,<1
+numba>=0.58.1,<1
+Pillow>=10.4.0,<13

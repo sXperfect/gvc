@@ -12,6 +12,8 @@ def cget_col_ids(
     np.ndarray[np.uint32_t, ndim=1, cast=True] qci,
     int p
 ):
+    if p <= 0:
+        raise ValueError("ploidy must be greater than zero")
 
     cdef np.ndarray[np.uint32_t, ndim=1] tqci = np.empty(len(qci)*p, dtype=np.uint32)
     set_tqci(tqci, qci, p, len(qci))

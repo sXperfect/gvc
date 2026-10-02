@@ -401,27 +401,39 @@ def _get_tensor_shape(
 
         shapes.append((bin_mat_nrows, bin_mat_ncols))
 
+    if not shapes:
+        raise ValueError("genotype payload does not contain variant matrices")
+
     nrows, ncols = shapes[0]
     for shape in shapes[1:]:
-        assert nrows == shape[0]
-        assert ncols == shape[1]
+        if shape != (nrows, ncols):
+            raise ValueError("encoded variant matrix shapes are inconsistent")
+
+    if nrows <= 0 or ncols <= 0:
+        raise ValueError("encoded matrix dimensions must be positive")
 
     if param_set.binarization_id == consts.BinarizationID.BIT_PLANE:
-
         if param_set.concat_axis == 0:
-            nrows = nrows // param_set.num_bin_mat
+            if nrows % param_set.num_bin_mat:
+                raise ValueError("bit-plane row dimension is not divisible by plane count")
+            nrows //= param_set.num_bin_mat
         elif param_set.concat_axis == 1:
-            ncols = ncols // param_set.num_bin_mat
+            if ncols % param_set.num_bin_mat:
+                raise ValueError("bit-plane column dimension is not divisible by plane count")
+            ncols //= param_set.num_bin_mat
 
     elif param_set.binarization_id == consts.BinarizationID.ROW_BIN_SPLIT:
-        vector_amax = ds.VectorAMax.from_bytes(enc_var.variants_amax_payload.read()).vector
-        nrows += int(np.sum(vector_amax[vector_amax != 1]))
+        vector_amax = ds.VectorAMax.from_bytes(
+            enc_var.variants_amax_payload.read()
+        ).vector
+        # Row-bin splitting expands each original row into bit-length rows.
+        # The AMax vector has exactly one entry per original variant row.
+        nrows = len(vector_amax)
 
-    tensor_nrows = nrows
-    tensor_ncols = ncols // param_set.p
-    tensor_nchannels = param_set.p
+    if ncols % param_set.p:
+        raise ValueError("allele column count is not divisible by ploidy")
 
-    return (tensor_nrows, tensor_ncols, tensor_nchannels)
+    return (nrows, ncols // param_set.p, param_set.p)
 
 class DecoderContext(object):
     def __init__(self):
@@ -537,9 +549,14 @@ class Decoder(object):
         log.info('Caching data')
 
         while True:
-            data_unit_type = self._bitstream_reader.read_bits(consts.DATA_UNIT_TYPE_LEN * 8)
-
-            if not self._bitstream_reader.read:
+            try:
+                data_unit_type = self._bitstream_reader.read_bits(
+                    consts.DATA_UNIT_TYPE_LEN * 8
+                )
+            except EOFError:
+                # Reaching EOF exactly between data units is the normal end of
+                # a GVC stream. EOF inside a data unit still propagates from
+                # that unit's parser as corruption.
                 break
 
             if data_unit_type == consts.DataUnitType.PARAMETER_SET:
@@ -592,47 +609,60 @@ class Decoder(object):
 
                 log.info("Decoding time:{:.3f}".format(t.time))
 
-    def random_access(self,
-        pos:t.List,
-        samples:str
-    ):
+    def random_access(self, pos, samples):
+        if self.index is None:
+            raise ValueError(
+                "random access requires the .metadata sidecar generated during encoding"
+            )
 
-        start_pos, end_pos = pos        
-        assert start_pos <= end_pos, "Genomic start position must be less or equal to end position"
+        if pos is None:
+            if self.index.num_blocks == 0:
+                return None
+            start_pos = int(self.index.root_idx[0, 0])
+            end_pos = int(self.index.root_idx[-1, 1])
+        else:
+            if not isinstance(pos, (list, tuple)) or len(pos) != 2:
+                raise ValueError("pos must be [start, end] or None")
+            start_pos, end_pos = pos
+            if start_pos > end_pos:
+                raise ValueError(
+                    "start position must be less than or equal to end position"
+                )
+
         query_col_ids = self.index.query_columns(samples)
-
-        #? Query block and parameter set id given position
         blk_ps_id_pairs = self.index.query_blk(start_pos, end_pos)
 
-        if blk_ps_id_pairs.shape[0]:
+        outputs = []
+        for block_id, block, param_set_id in blk_ps_id_pairs:
+            row_slice = self.index.get_row_mask(
+                block_id, start_pos, end_pos
+            )
+            if row_slice.start >= row_slice.stop:
+                continue
 
-            for i_block in range(blk_ps_id_pairs.shape[0]):
-                block_id, block, param_set_id = blk_ps_id_pairs[i_block, :]
+            param_set = self.decoder_context.parameter_sets[param_set_id]
+            output = decode_encoded_variants(
+                param_set,
+                block.block_payload,
+                row_slice,
+                query_col_ids,
+            )
+            if output:
+                outputs.append(output)
 
-                row_slice = self.index.get_row_mask(block_id, start_pos, end_pos)
-                if row_slice.start < row_slice.stop:
-                    param_set = self.decoder_context.parameter_sets[param_set_id]
-
-                    out = decode_encoded_variants(
-                        param_set,
-                        block.block_payload,
-                        row_slice,
-                        query_col_ids
-                    )
-
-                #? No variant found given POSs
-                else:
-                    pass
-                
-                try:
-                    self._out_f.write(out)
-                except AttributeError:
-                    print(out)
-
-        #? No block found given POSs
-        else:
+        if not outputs:
             return None
-        
+
+        # Each decoded block is already newline-terminated. Concatenate the
+        # block streams directly so random-access output has the same framing
+        # as full-file decoding, without blank lines between blocks.
+        combined = "".join(outputs)
+        if self._out_f is not None:
+            self._out_f.write(combined)
+        else:
+            print(combined, end="")
+        return combined
+
     def compare(self,
         orig_fpath
     ):

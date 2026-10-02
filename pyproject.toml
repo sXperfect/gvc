@@ -1,0 +1,98 @@
+[build-system]
+requires = [
+    "setuptools>=68",
+    "wheel>=0.45.1,<1",
+    "Cython>=3.2.9,<4",
+    "numpy>=1.24.4,<3",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gvc"
+dynamic = ["version"]
+description = "Genomic Variant Codec for compact genotype representation"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+    { name = "GVC contributors" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "numpy>=1.24.4,<3",
+    "scipy>=1.10.1,<2",
+]
+
+[project.optional-dependencies]
+vcf = [
+    "cyvcf2>=0.31.4,<0.32; python_version < '3.9'",
+    "cyvcf2>=0.34.0,<1; python_version >= '3.9'",
+]
+speed = [
+    "numba>=0.58.1,<1",
+]
+jbig = [
+    "Pillow>=10.4.0,<13",
+]
+all = [
+    "cyvcf2>=0.31.4,<0.32; python_version < '3.9'",
+    "cyvcf2>=0.34.0,<1; python_version >= '3.9'",
+    "numba>=0.58.1,<1",
+    "Pillow>=10.4.0,<13",
+]
+test = [
+    "pytest>=8.3.5,<10",
+    "Cython>=3.2.9,<4",
+    "build>=1.2.2.post1,<2",
+    "setuptools>=75.3.2,<76; python_version < '3.9'",
+    "wheel>=0.45.1,<1; python_version < '3.9'",
+]
+dev = [
+    "pytest>=8.3.5,<10",
+    "Cython>=3.2.9,<4",
+    "build>=1.2.2.post1,<2",
+    "setuptools>=75.3.2,<76; python_version < '3.9'",
+    "wheel>=0.45.1,<1; python_version < '3.9'",
+    "ruff>=0.15.12,<1",
+]
+
+[project.scripts]
+gvc = "gvc.__main__:main"
+
+[project.urls]
+Repository = "https://github.com/sXperfect/gvc"
+Upstream = "https://github.com/tnt-LUH/gvc"
+
+[tool.setuptools.dynamic]
+version = { attr = "gvc._version.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["gvc*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-config", "--strict-markers"]
+markers = [
+    "optional: requires GVC optional dependency extras",
+]
+
+[tool.ruff]
+target-version = "py38"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

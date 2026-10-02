@@ -1,5 +1,7 @@
 # Genomic Variant Codec (GVC)
 
+[![CI](https://github.com/sXperfect/gvc/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/sXperfect/gvc/actions/workflows/ci.yml)
+
 Open Source Genotype Compressor
 
 ## Usage policy
@@ -17,10 +19,26 @@ We kindly ask to refrain from publishing analyses that were conducted using this
 ## Dependencies
 ---
 
-Both python version 3.7 or newer and CMAKE are required.
+GVC 1.0.x supports Python 3.8 or newer. CMake and a C/C++ compiler are
+required for the native components. The validated 1.0.x release platform is
+Linux; macOS and Windows are currently best-effort and are not release-gated
+until dedicated platform validation is added. Future minor release lines may
+raise the minimum Python version; older release lines remain available for
+legacy Python environments. See [docs/design/versioning.md](docs/design/versioning.md)
+and [docs/development/platform-support.md](docs/development/platform-support.md).
 For anaconda or conda user, CMAKE, gcc and gxx libraries are required and can be installed through: `conda install -c conda-forge cmake gxx_linux-64 gcc_linux-64`.
-See [requirements.txt](requirements.txt) for the list of required python libraries.
-<!-- For python version 3.6 or lower, an additional python package `dataclass` is required. -->
+The core numerical dependencies are declared in `pyproject.toml`. Install
+optional integrations explicitly:
+
+```bash
+python -m pip install -e ".[vcf]"      # VCF/BCF parsing
+python -m pip install -e ".[speed]"    # Numba acceleration
+python -m pip install -e ".[all]"      # all optional runtime integrations
+python -m pip install -e ".[test]"     # test/build tooling
+```
+
+`requirements.txt` remains a full-feature compatibility install for legacy
+workflows.
 
 ## Building
 ---
@@ -29,20 +47,26 @@ Clone this repository:
 
     git clone https://github.com/sXperfect/gvc
 
-Run setup script `setup.sh`
+For a development installation:
+
+    python -m pip install -e .
+
+Build all native components and run the local verification gate with:
 
     bash setup.sh
+    ./scripts/verify.sh
 
-This step will install and compile all dependencies automatically.
-<!-- This will create automaticaly a virtual environment with all dependencies installed located in `tmp/venv`.
-If you use conda environment, you can install all dependencies with command `python3 -m pip install -r requirements.txt`. -->
+The local verification gate compiles the Cython extensions and the standalone
+CMake helper before running the test suite.
 
 ### Entropy Codec
 ---
 
-In order to encode or decode the payloads based on JBIG codec, an external executable is required.
-You can use any of the existing and publicly available JBIG codec implementation.
-We provide an example on how to integrate JBIG-based codec [here](JBIG.md).
+GVC's historical JBIG codec uses the external JBIG-KIT T.85 executables
+`pbmtojbg85` and `jbgtopbm85`. The maintained integration discovers them
+from PATH or from `GVC_JBIG_ENCODER` / `GVC_JBIG_DECODER`. See
+[JBIG.md](JBIG.md) for installation, timeout configuration, multiprocessing,
+and historical compatibility verification.
 
 Generic compressors, such as LZMA or BZIP2, are supported.
 Please refer to this [documentation](CODEC.md) for integration.

@@ -27,6 +27,11 @@ def debin_rc_bin_split(np.ndarray[bool, ndim=2, cast=True] bin_mat, np.ndarray[u
     cdef int nrows = bitlen_vect.shape[0]
     cdef int ncols = bin_mat.shape[1]
 
+    if np.any(bitlen_vect == 0):
+        raise ValueError("bit-length vector entries must be positive")
+    if int(np.sum(bitlen_vect, dtype=np.uint64)) != bin_mat.shape[0]:
+        raise ValueError("bit-length vector does not match encoded row count")
+
     cdef np.ndarray[np.uint8_t, ndim=2] mat = np.zeros((nrows, ncols), dtype=np.uint8)
 
     debin_rc_bin_split_loop(mat, bin_mat, bitlen_vect, nrows, ncols)
@@ -67,18 +72,27 @@ cdef char gt_val_to_gt_char(np.int8_t v):
 @cython.wraparound(False)  # turn off negative index wrapping for entire function
 @cython.overflowcheck.fold(False)
 def recon_gt_mat_with_phase_val(np.ndarray[np.int8_t, ndim=2] allele_mat, bool phase_val, int p):
+    if p <= 0:
+        raise ValueError("ploidy must be greater than zero")
+    if allele_mat.shape[1] % p != 0:
+        raise ValueError("allele matrix column count must be divisible by ploidy")
+    if allele_mat.size and (np.min(allele_mat) < -1 or np.max(allele_mat) > 9):
+        raise ValueError("native genotype text conversion supports allele values -1..9")
 
-    cdef Py_ssize_t length
-    cdef char* gt_mat
+    cdef Py_ssize_t length = 0
+    cdef char* gt_mat = NULL
 
     crecon_gt_mat_with_phase_val(
         &gt_mat, &length, allele_mat, phase_val, p
     )
 
-    out_gt_mat = PyBytes_FromStringAndSize(gt_mat, length)
-    free(gt_mat)
+    if gt_mat == NULL:
+        raise MemoryError("failed to allocate genotype text buffer")
 
-    return out_gt_mat
+    try:
+        return PyBytes_FromStringAndSize(gt_mat, length)
+    finally:
+        free(gt_mat)
 
 @cython.boundscheck(False) #? turn off bounds-checking for entire function
 @cython.wraparound(False)  #? turn off negative index wrapping for entire function
@@ -119,6 +133,8 @@ cdef void crecon_gt_mat_with_phase_val(
         phase_char = b'|'
 
     gt_mat[0] = <char *> malloc((gt_mat_len + 1) * sizeof(char))
+    if gt_mat[0] == NULL:
+        raise MemoryError("failed to allocate genotype text buffer")
         
     #? Needed only if "PyBytes_FromStringAndSize" is not used in the next step
     #? This is used to avoid string remnant from other process
@@ -145,7 +161,7 @@ cdef void crecon_gt_mat_with_phase_val(
 
                 gt_mat[0][n] = phase_char
                 if curr_gt_val != 0:
-                    gt_mat[0][n] = gt_val_to_gt_char(curr_gt_val)
+                    gt_mat[0][n+1] = gt_val_to_gt_char(curr_gt_val)
                 n += 2
             
             #? Add separator at the end of processing one sample

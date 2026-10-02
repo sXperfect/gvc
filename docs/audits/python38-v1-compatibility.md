@@ -1,0 +1,104 @@
+# GVC 1.0.x / Python 3.8 compatibility audit
+
+## Scope
+
+This audit treats CPython 3.8 as the compatibility anchor for the GVC 1.0.x
+maintenance line. The goal is to modernize dependencies and implementation
+without silently changing the historical GVC serialization contract.
+
+## Implemented verification
+
+The maintained test suite now covers:
+
+- reviewed latest Python 3.8 dependency stack plus an unconstrained resolver
+  probe;
+- byte-exact v1 golden serialization for parameter sets, permutations, AMax,
+  blocks, access units, and multiple structural golden .gvc shapes covering
+  row-bin-split, missing/NA values, mixed phase payloads, and sorted multi-plane data;
+- exhaustive truncation rejection for the structural golden fixture;
+- malformed sizes, IDs, flags, payload lengths, permutation values, and
+  bitstream boundaries;
+- deterministic native-vs-Python differential tests for cquery, cdebinarize,
+  crc_id, and the standalone libgvc permutation helper;
+- generated encode/decode cases across ploidy 1-4, phase modes, missing/NA
+  values, sorting, transpose, and both binarization schemes;
+- tiny diploid, haploid, and mixed-ploidy VCF fixtures, including mixed
+  phasing, multiallelic calls, missing genotypes, partial final blocks, exact
+  block boundaries, and ploidy-driven ParameterSet transitions;
+- complete Encoder -> .gvc -> Decoder file round trips for bit-plane,
+  row-bin-split, haploid, and mixed-ploidy data using a deterministic
+  JBIG-header-compatible in-memory codec;
+- end-to-end random-access tests for genomic intervals, sample-only selection,
+  empty in-block intervals, and metadata sidecars;
+- deterministic two-worker multiprocessing encode parity against sequential
+  output, structured reader/worker failure injection, atomic rollback,
+  watchdog cancellation, and successful spawn-mode encoding with explicit
+  child-process initialization;
+- wheel and sdist build/install isolation from outside the source checkout;
+- installed native-extension imports and installed CLI startup;
+- a true JBIG-KIT encode/decode smoke test using pbmtojbg85/jbgtopbm85;
+- bounded real-JBIG multiprocessing stress with four encoder workers, one
+  variant per block, transactional cleanup checks, and parallel random access;
+- an isolated release-benchmark smoke profile recording throughput, RSS,
+  storage size, and random-access latency without enforcing noisy hosted timing
+  thresholds;
+- the original LUH test_block01.vcf.gz fixture, fetched from pinned upstream
+  commit f9af2127a2ff0b87727924860e33f1905fd507cd and verified against Git blob
+  af45a419e46563906ac51fad0be869291316cea9, through both bit-plane and
+  row-bin-split core round trips on the Python 3.8 release gate.
+
+## Correctness fixes found by the audit
+
+The expanded tests exposed and now protect fixes for:
+
+- cyvcf2 phasing convention conversion at the ingestion boundary;
+- haploid zero-width phase matrices;
+- row-bin-split tensor row-count reconstruction;
+- Encoder's default codec name not matching the registered codec;
+- unsafe standalone C permutation decoding, including floor(log2(n)) for
+  non-power-of-two permutation sizes and unchecked payload reads;
+- unknown sample IDs silently mapping to sample column zero;
+- interval queries before the first block or inside metadata gaps;
+- BinMat emitting dimensions but omitting the matrix payload;
+- truncated lazy payload regions being accepted through seek arithmetic;
+- explicit serialized integer/flag/payload size validation.
+
+## Hosted CI policy
+
+Python 3.8 runs the complete release-quality gate, including packaging
+isolation. Newer interpreters exercise compatibility, native modules, tests,
+CLI, and optional integrations without rebuilding release artifacts repeatedly.
+This keeps CI credit-conscious while preserving the strongest checks at the
+supported floor.
+
+## Offline / external verification still required
+
+The following checks cannot be fully represented by the self-contained hosted
+suite and should be performed before declaring a production 1.0.x release:
+
+1. Decode representative historical .gvc files produced by the original LUH
+   implementation, not only synthetic structural golden fixtures. Hosted CI
+   now covers the original LUH VCF input fixture but no historical .gvc artifact
+   was present in the upstream repository.
+2. Run the historical large VCF fixture through the complete production-scale
+   workload (all blocks and expensive sorting combinations). Hosted CI validates
+   a pinned 2048-variant block through both binarization schemes with real
+   JBIG-KIT to keep runtime bounded.
+3. Exercise real JBIG-KIT on production-size matrices and sustained high
+   concurrency. Hosted CI now covers four-worker queue pressure on bounded
+   synthetic data plus actual pbmtojbg85/jbgtopbm85 interoperability.
+4. Exercise random-access queries against real production-scale metadata
+   sidecars; hosted CI covers the same behavior on deterministic tiny fixtures.
+5. Stress the multiprocessing encoder beyond hosted queue-pressure,
+   two-worker/spawn correctness, and failure tests, especially large inputs,
+   abrupt OS-level termination, and production codec subprocess failures.
+6. Stress very large matrices/block counts near serialized field-size
+   boundaries and monitor memory use.
+7. Run native builds on any production platforms beyond the Linux CI target,
+   especially compiler/OpenMP and shared-library behavior.
+8. Capture controlled-machine benchmark JSON with benchmarks/run_release.py
+   and establish the release baseline. Hosted CI validates report generation
+   but intentionally does not treat runner timing as a performance contract.
+
+These are release checks, not reasons to weaken or skip the self-contained CI
+gate.

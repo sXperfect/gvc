@@ -1,8 +1,9 @@
 import logging as log
-import numpy as np
+
 from .utils import bstr2int, int2bstr
 
-class BitstreamWriter(object):
+
+class BitstreamWriter:
     def __init__(self, f):
         self._accumulator = 0
         self._bit_count = 0
@@ -11,16 +12,14 @@ class BitstreamWriter(object):
     def __enter__(self):
         return self
 
-
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.flush()
 
     def __del__(self):
         try:
             self.flush()
-        except ValueError:  # I/O operation on closed file
+        except ValueError:
             pass
-
 
     def _write_bit(self, bit):
         if self._bit_count == 8:
@@ -29,22 +28,20 @@ class BitstreamWriter(object):
             self._accumulator |= 1 << (7 - self._bit_count)
         self._bit_count += 1
 
-
     def write_bits(self, bits, nbits):
+        if not isinstance(nbits, int) or isinstance(nbits, bool) or nbits < 0:
+            raise ValueError("nbits must be a non-negative integer")
+        bits = int(bits)
+        if bits < 0:
+            raise ValueError("bits must be non-negative")
         if bits.bit_length() > nbits:
-            log.error('bit length of bits exceeds nbits')
-            raise ValueError('bit length of bits exceeds nbits')
-
-        # Greater than 0 to avoid infinite-loop
+            raise ValueError("bit length of bits exceeds nbits")
         while nbits > 0:
             self._write_bit(bits & 1 << (nbits - 1))
             nbits -= 1
 
-
     def byte_aligned(self):
-        if self._bit_count % 8 != 0:
-            return False
-        return True
+        return self._bit_count % 8 == 0
 
     def isempty(self):
         return self._bit_count == 0
@@ -61,22 +58,18 @@ class BitstreamWriter(object):
         self.check_empty()
         self.out.seek(offset, whence)
 
-
     def tell(self):
         self.check_empty()
         return self.out.tell()
 
-
     def flush(self):
-        # Write only when empty to avoid writing b'\x00'
         if not self.isempty():
             self.out.write(bytearray([self._accumulator]))
-
         self._accumulator = 0
         self._bit_count = 0
 
 
-class BitstreamReader(object):
+class BitstreamReader:
     def __init__(self, f):
         self.input = f
         self._reset()
@@ -94,41 +87,58 @@ class BitstreamReader(object):
 
     def _read_bit(self):
         if not self._bit_count:
-            a = self.input.read(1)
-            
-            if a:
-                self._accumulator = ord(a)
-
+            data = self.input.read(1)
+            self.read = len(data)
+            if not data:
+                raise EOFError("unexpected end of bitstream while reading bits")
+            self._accumulator = data[0]
             self._bit_count = 8
-            self.read = len(a)
-        rv = (self._accumulator & (1 << (self._bit_count - 1))) >> (self._bit_count - 1)
+        value = (self._accumulator & (1 << (self._bit_count - 1))) >> (
+            self._bit_count - 1
+        )
         self._bit_count -= 1
-        return rv
+        return value
 
     def _byte_aligned(self):
-        if self._bit_count % 8 != 0:
-            return False
-        return True
+        return self._bit_count % 8 == 0
 
     def align_to_byte(self):
         if not self._byte_aligned():
             self.read_bits(self._bit_count)
 
     def read_bits(self, n):
-        v = 0
-        for __ in range(n):
-            v = (v << 1) | self._read_bit()
-        return v
-    
+        if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+            raise ValueError("bit count must be a non-negative integer")
+        value = 0
+        for _ in range(n):
+            value = (value << 1) | self._read_bit()
+        return value
+
+    def require_available(self, n):
+        if n < 0:
+            raise ValueError("required byte count must be non-negative")
+        if not self._byte_aligned():
+            raise ValueError("bitstream must be byte-aligned")
+
+        current = self.input.tell()
+        try:
+            self.input.seek(0, 2)
+            end = self.input.tell()
+        finally:
+            self.input.seek(current)
+
+        available = end - current
+        if available < n:
+            raise EOFError(
+                "unexpected end of bitstream: requested {}, available {}".format(
+                    n, available
+                )
+            )
+
     def read_bytes(self, n, ret_int=False):
-        assert self._byte_aligned()
-        
+        self.require_available(n)
         payload = self.input.read(n)
-        
-        if ret_int:
-            return bstr2int(payload)
-        else:
-            return payload
+        return bstr2int(payload) if ret_int else payload
 
     def seek(self, offset, whence=0):
         self._reset()
@@ -137,85 +147,68 @@ class BitstreamReader(object):
     def tell(self):
         if not self._byte_aligned():
             raise ValueError("bitstream must be byte-aligned")
-        else:
-            if self._bit_count:
-                return self.input.tell() - self._bit_count // 8
-            else:
-                return self.input.tell()
+        if self._bit_count:
+            return self.input.tell() - self._bit_count // 8
+        return self.input.tell()
 
-class RandomAccessHandler(object):
 
-    def __init__(self, f:BitstreamReader, start_pos, length, autoseek=False):
+class RandomAccessHandler:
+    def __init__(self, f, start_pos, length, autoseek=False):
         self.f = f
         self.start_pos = start_pos
         self.length = length
-
         if autoseek:
             self.f.seek(self.length, 1)
 
     def __call__(self):
         return self.read()
-        
+
     def read(self, nbytes=None):
         self.f.seek(self.start_pos)
-
         if nbytes is None:
             return self.f.read_bytes(self.length)
-
-        elif nbytes <= self.length:
+        if nbytes <= self.length:
             return self.f.read_bytes(nbytes)
+        raise ValueError("requested bytes exceed random-access region")
 
-    # To automate read()
     def __radd__(self, other):
         return other + self.read()
 
     def __len__(self):
         return self.length
 
-class BitIO(object):
-    BYTEORDER = 'big'
 
-    def __init__(self,
-        bits=None,
-        nbits=None,
-    ):
+class BitIO:
+    BYTEORDER = "big"
 
+    def __init__(self, bits=None, nbits=None):
         self.data = 0
         self.len = 0
-
-        # Initialization with initial data
         if bits is not None and nbits is not None:
             self.write(bits, nbits)
-
-        # Initialization without initial data
         elif bits is None and nbits is None:
             pass
-
         else:
-            log.error('Either bits or nbits is None')
-            raise RuntimeError("Either bits or nbits is None")
+            raise ValueError("bits and nbits must either both be set or both be None")
 
     def write(self, bits, nbits):
-
+        if not isinstance(nbits, int) or isinstance(nbits, bool) or nbits < 0:
+            raise ValueError("nbits must be a non-negative integer")
         if not isinstance(bits, int):
             bits = int(bits)
-
+        if bits < 0:
+            raise ValueError("bits must be non-negative")
         if bits.bit_length() > nbits:
-            log.error('bit length of bits exceeds nbits')
-            raise RuntimeError("Bit length of bits exceeds nbits")
-
+            raise ValueError("bit length of bits exceeds nbits")
         self.len += nbits
-
         self.data <<= nbits
         self.data ^= bits
 
     def _byte_aligned(self):
-        if self.len % 8 == 0:
-            return True
-        return False
+        return self.len % 8 == 0
 
     def len_in_byte(self):
-        return int(np.ceil(self.len / 8))
+        return (self.len + 7) // 8
 
     def __len__(self):
         return self.len
@@ -225,11 +218,8 @@ class BitIO(object):
             self.write(0, 8 - (self.len % 8))
 
     def to_bytes(self, align=False):
-
         if align:
             self.align_to_byte()
-
-        if self._byte_aligned():
-            return int2bstr(self.data, self.len_in_byte(), order=self.BYTEORDER)
-        else:
-            raise RuntimeError("Byte not aligned")
+        if not self._byte_aligned():
+            raise ValueError("bit buffer is not byte-aligned")
+        return int2bstr(self.data, self.len_in_byte(), order=self.BYTEORDER)

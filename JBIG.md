@@ -1,157 +1,117 @@
-# JBIG
+# JBIG-KIT integration
 
-Two functions must be provided to integrate an external JBIG executable: `encode(matrix)` for encoding process and `decode(payload)` for decoding process.
-The functions call jbig executeable and then do its respective task.
+GVC's historical `CodecID.JBIG1` payload uses an external JBIG1/T.85
+implementation. GVC 1.0.x now contains a maintained subprocess integration in
+`gvc.codec.jbigkit`; users no longer need to copy the old example module into the
+package.
 
-Here we provides an example based on [JBIG-KIT](https://www.cl.cam.ac.uk/~mgk25/jbigkit/).
-First, create a folder called `third_party`, then download and extract JBIG-KIT to this folder.
-Compile the JBIG-KIT source code to produce executables for both encoding and decoding process.
-Here we use `pbmtojbg85` for the encoding process and `jbgtopbm85` for the decoding proceses.
+## Install JBIG-KIT
 
-The next step is to create a new file `jbigkit.py` that contains both encode and decode functions.
-Both functions should specify all necessary flags. 
-The file shall be located in `gvc/codec` folder. 
-The content should looks like this:
+The integration expects these executables:
+
+- `pbmtojbg85` for encoding;
+- `jbgtopbm85` for decoding.
+
+On Ubuntu/Debian systems that provide JBIG-KIT binaries, install the
+`jbigkit-bin` package. Alternatively, build JBIG-KIT 2.1 and point GVC at the
+resulting executables.
+
+Pillow is used for PBM interchange and is available through the GVC JBIG/all
+optional dependency groups:
+
+```bash
+python -m pip install ".[jbig]"
+```
+
+## Executable discovery
+
+By default GVC searches `PATH` for `pbmtojbg85` and `jbgtopbm85`.
+
+Custom locations can be configured without editing GVC:
+
+```bash
+export GVC_JBIG_ENCODER=/opt/jbigkit/pbmtools/pbmtojbg85
+export GVC_JBIG_DECODER=/opt/jbigkit/pbmtools/jbgtopbm85
+```
+
+The subprocess timeout defaults to 60 seconds per matrix and can be changed
+with:
+
+```bash
+export GVC_JBIG_TIMEOUT=300
+```
+
+A non-positive timeout is rejected.
+
+## Python API
+
+The codec is registered automatically as GVC's `jbig` codec. Direct use is also
+available:
 
 ```python
-import os
-import logging as log
-import subprocess as sp
-import tempfile as tmp
-
-from PIL import Image
 import numpy as np
+from gvc.codec import jbigkit
 
-from .jbig import get_shape
-from .. import settings
-from .. import utils
-
-# Allow super large image decompression. DO NOT REMOVE!
-Image.MAX_IMAGE_PIXELS = np.inf
-
-JBIGKIT_PATH = os.path.join(settings.THIRD_PARTY_DIR, 'jbigkit-2.1', 'pbmtools')
-ENCODER_FPATH = os.path.join(JBIGKIT_PATH, "pbmtojbg85") #? Specify path to encoder
-DECODER_FPATH = os.path.join(JBIGKIT_PATH, "jbgtopbm85") #? Specify path to decoder
-utils.check_executable(ENCODER_FPATH) #? Check if executable exists
-utils.check_executable(DECODER_FPATH) #? Check if executable exists
-
-JBG_LRLTWO = 0x40
-JBG_VLENGTH = 0x20
-JBG_TPBON = 0x08
-
-def encode(
-    matrix:np.ndarray
-) -> bytes:
-    """
-    Encode a binary matrix as JBIG1 bytestream.
-
-    Parameters
-    ----------
-    matrix : ndarray (2d)
-        binary_matrix: The binary matrix to encode. Must contain integers equal to 0 or 1
-
-    Returns
-    -------
-    jbig1_binary: binary
-        The JBIG1 bytestream.
-
-    """
-
-    # Initialize temporary directory
-    with tmp.TemporaryDirectory(prefix='PBM2JBG_') as dpath:
-        
-        pbm_fpath = os.path.join(dpath, 'tmp.pbm')
-        jbg_fpath = os.path.join(dpath, 'tmp.jbg')
-
-        # Store matrix as PBM file
-        pbm_im = Image.fromarray(matrix.astype(bool))
-        pbm_im.save(pbm_fpath)
-
-        flags = JBG_TPBON
-        l0 = (1<<32)-1
-
-        # Encoder parameters
-        args = [
-            "-p", str(flags),
-            "-s", str(l0)
-        ]
-
-        proc = sp.run([ENCODER_FPATH, *args, pbm_fpath, jbg_fpath], stdout=sp.PIPE, stderr=sp.PIPE)
-
-        if proc.returncode != 0:
-            log.error(proc.stderr)
-            raise RuntimeError(proc.stderr.decode("UTF-8"))
-
-        # Load JBIG payload
-        with open(jbg_fpath, 'rb') as jbig_f:
-            jbig_payload = jbig_f.read()
-
-    return jbig_payload
-
-def decode(
-    jbig_payload:bytes
-) -> np.ndarray:
-
-    """
-    Decode a JBIG1 bytestream as binary matrix.
-
-    Parameters
-    ----------
-    jbig_payloadtream: bytes
-        The JBIG1 bytestream.
-
-    Returns
-    -------
-    bin_matrix: np.ndarray
-        The binary matrix
-    """
-
-    # Initialize temporary directory
-    with tmp.TemporaryDirectory(prefix='JBG2PBM_') as dpath:
-        jbg_fpath = os.path.join(dpath, 'tmp.jbg')
-        pbm_fpath = os.path.join(dpath, 'tmp.pbm')
-
-        # Store JBIG payload
-        with open(jbg_fpath, 'wb') as jbig1_f:
-            jbig1_f.write(jbig_payload)
-
-        __, ncols = get_shape(jbig_payload[:12])
-
-        # Decoder parameters
-        args = [
-            "-x", str(ncols),
-            "-B", str(2**30),
-        ]
-
-        proc = sp.run([DECODER_FPATH, *args, jbg_fpath, pbm_fpath], stdout=sp.PIPE, stderr=sp.PIPE)
-
-        if proc.returncode != 0:
-            log.error(proc.stderr)
-            raise RuntimeError(proc.stderr.decode("UTF-8"))
-
-        # Load matrix (pbm image)
-        pbm_im = Image.open(pbm_fpath)
-        mat = np.asarray(pbm_im)
-
-    return mat
+matrix = np.array([[0, 1], [1, 0]], dtype=bool)
+payload = jbigkit.encode(matrix)
+restored = jbigkit.decode(payload)
 ```
 
-Internally, GVC does not extract the header or the parameters of the payload, thus JBIG parameters are independent from GVC.
+The wrapper validates:
 
-We then register the encode and decode functions in `__init__.py` file located in `gvc/codec`:
+- two-dimensional binary input;
+- executable existence and execute permission;
+- subprocess timeout and non-zero exits;
+- non-truncated JBIG headers;
+- encoded/decoded matrix shape consistency;
+- readable decoder PBM output.
 
-```python
+External command failures raise `JBIGKitError` with the command status and stderr.
 
-from . import jbigkit #? Import jbigkit
+## Multiprocessing
 
-#? If a new codec is added, please update data_structure.consts too
-MAT_CODECS = {
-    CodecID.JBIG1 : { #? Add new dict entries for additional codec
-        "name": "jbig",
-        "encoder": jbigkit.encode, #? Add encode function
-        "decoder": jbigkit.decode, #? Add decode function
-    }
-}
+The maintained functions are module-level and therefore compatible with
+GVC's spawn/fork multiprocessing architecture. They do not require inherited
+runtime registry mutations.
+
+If an application replaces the codec dynamically, spawn/forkserver workers can
+recreate that state with `multiprocessing_initializer`; see
+`docs/design/multiprocessing.md`.
+
+## Historical compatibility verification
+
+The original LUH repository used `tests/test_block01.vcf.gz` as its main
+large encode/decode fixture. It is intentionally not committed again to this
+repository because it is approximately 7.5 MB compressed.
+
+The Python 3.8 release CI fetches the fixture from the pinned original commit:
+
+```text
+tnt-LUH/gvc
+commit: f9af2127a2ff0b87727924860e33f1905fd507cd
+blob:   af45a419e46563906ac51fad0be869291316cea9
 ```
 
-Now JBIG is ready to use.
+For a larger offline verification, download that fixture and run:
+
+```bash
+python scripts/verify_historical.py tests/test_block01.vcf.gz --max-blocks 0
+```
+
+To additionally reproduce the original row/column sorting combinations:
+
+```bash
+python scripts/verify_historical.py tests/test_block01.vcf.gz \
+  --max-blocks 0 \
+  --include-sorting
+```
+
+These full runs can be substantially more expensive than the bounded hosted
+release gate.
+
+## Format behavior
+
+GVC stores the JBIG payload bytes rather than normalizing external codec
+parameters. The serialized GVC framing therefore remains compatible with the
+historical design while the executable integration, validation, and failure
+handling are maintained by GVC.

@@ -32,3 +32,5 @@ __pycache__/
 .venv/
 
 *.npz
+
+/benchmarks/results/
