@@ -496,3 +496,24 @@ def test_sequential_success_replaces_existing_output_without_backup_leaks(
     assert not list(tmp_path.glob("sequential-replace.gvc.gvc-backup-*"))
     assert not list(tmp_path.glob("sequential-replace.gvc.metadata.gvc-backup-*"))
     assert not list(tmp_path.glob("sequential-replace.gvc.tmp.*"))
+
+
+
+def test_decoder_context_manager_closes_owned_files(
+    framed_test_codec,
+    tmp_path,
+):
+    encoded = _encode_random_access_fixture(
+        framed_test_codec, tmp_path, "decoder-context"
+    )
+    decoded = tmp_path / "decoder-context.txt"
+
+    with Decoder(str(encoded), str(decoded)) as decoder:
+        input_handle = decoder._f
+        output_handle = decoder._out_f
+        decoder.decode()
+
+    assert input_handle.closed
+    assert output_handle.closed
+    assert decoder._f is None
+    assert decoder._out_f is None
