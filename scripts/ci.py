@@ -196,11 +196,14 @@ def install_and_smoke_artifact(artifact, name):
         "import importlib.metadata as md; "
         "import gvc, gvc.cquery, gvc.cdebinarize, gvc.data_structures.crc_id; "
         "origin = Path(gvc.__file__).resolve(); "
+        "installed = md.version('gvc'); "
         "print('gvc origin:', origin); "
-        "print('gvc version:', md.version('gvc')); "
-        "assert md.version('gvc') == gvc.__version__; "
+        "print('gvc version:', installed); "
         "source = Path(" + repr(str(ROOT / "gvc")) + ").resolve(); "
-        "assert source != origin and source not in origin.parents"
+        "exec(\"if installed != gvc.__version__:\\n"
+        "    raise RuntimeError('installed metadata/version mismatch')\\n"
+        "if source == origin or source in origin.parents:\\n"
+        "    raise RuntimeError('artifact smoke imported source checkout')\")"
     )
     status = _run_external([py, "-c", code], cwd=outside, env=env)
     if status:
