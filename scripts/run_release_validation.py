@@ -212,6 +212,16 @@ def main(argv=None):
         "steps": [],
     }
     if args.rc and evidence["git_dirty"]:
+        evidence["steps"].append(
+            {
+                "name": "clean_worktree",
+                "status": "fail",
+                "error": "RC validation requires a clean git worktree",
+            }
+        )
+        evidence["status"] = "fail"
+        evidence["completed_unix"] = time.time()
+        _write_evidence(args.evidence_output, evidence)
         raise RuntimeError("RC validation requires a clean git worktree")
 
     readiness = [sys.executable, "scripts/check_release_readiness.py"]
