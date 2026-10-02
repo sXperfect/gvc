@@ -2,12 +2,22 @@
 """Static release-readiness preflight for the GVC 1.0.x line."""
 
 import argparse
+import importlib.util
 import re
 import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_version_policy():
+    path = ROOT / "scripts" / "version_policy.py"
+    spec = importlib.util.spec_from_file_location("gvc_version_policy", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 
 REQUIRED_PATHS = (
     "docs/audits/release-1.0-readiness.md",
@@ -55,14 +65,14 @@ def check_readiness(allow_dev=True):
         problems.append("could not determine package version")
     else:
         version = match.group(1)
-        if not version.startswith("1.0."):
-            problems.append("release/1.0 requires a 1.0.x version")
-        if not allow_dev:
-            rc_or_final = re.fullmatch(r"1\.0\.\d+(?:rc\d+)?", version)
-            if rc_or_final is None:
-                problems.append(
-                    "release candidate must use 1.0.<patch>rcN or 1.0.<patch>"
-                )
+        policy = _load_version_policy()
+        state = policy.classify_version(version)
+        if state == "invalid":
+            problems.append("release/1.0 requires a valid 1.0.x dev, RC, or final version")
+        if not allow_dev and not policy.is_taggable(version):
+            problems.append(
+                "release candidate must use 1.0.<patch>rcN or 1.0.<patch>"
+            )
 
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     if 'requires-python = ">=3.8"' not in pyproject:
