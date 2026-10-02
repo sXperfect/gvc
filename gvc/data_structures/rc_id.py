@@ -21,6 +21,11 @@ def _required_bytes(num_entries):
 
 
 def decode_rowcolids(data, num_entries):
+    if not isinstance(num_entries, int) or isinstance(num_entries, bool):
+        raise TypeError("num_entries must be an integer")
+    if not 0 <= num_entries <= np.iinfo(np.uint16).max:
+        raise ValueError("num_entries is outside the uint16 permutation range")
+
     data = np.asarray(data, dtype=np.uint8)
     if data.ndim != 1:
         raise ValueError("permutation payload must be one-dimensional")
