@@ -115,3 +115,28 @@ def test_amax_internal_attribute_error_is_not_swallowed(monkeypatch):
 
     with pytest.raises(AttributeError, match="synthetic internal attribute failure"):
         decoder.decode_encoded_variants(param_set, payload)
+
+
+
+def test_decode_does_not_swallow_output_writer_attribute_error(monkeypatch):
+    class BrokenWriter:
+        def write(self, value):
+            raise AttributeError("synthetic writer failure")
+
+    instance = decoder.Decoder.__new__(decoder.Decoder)
+    instance.decoder_context = decoder.DecoderContext()
+    instance.decoder_context.parameter_sets[0] = SimpleNamespace()
+    instance.decoder_context.access_units[0] = SimpleNamespace(
+        header=SimpleNamespace(parameter_set_id=0),
+        blocks=[SimpleNamespace(block_payload=object())],
+    )
+    instance._out_f = BrokenWriter()
+
+    monkeypatch.setattr(
+        decoder,
+        "decode_encoded_variants",
+        lambda *args, **kwargs: "decoded\n",
+    )
+
+    with pytest.raises(AttributeError, match="synthetic writer failure"):
+        instance.decode()
