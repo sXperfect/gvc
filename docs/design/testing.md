@@ -30,13 +30,18 @@ This deliberately tests GVC-owned logic without requiring an external JBIG execu
 
 VCF parsing, production JBIG adapters, optional acceleration, and larger datasets belong in explicitly scoped integration tests. They must not make the core unit suite dependent on external tools or downloads.
 
-## Future correctness work
+## Maintained compatibility coverage
 
-Before GVC 2.x, expand coverage for:
+The current 1.0.x suite includes:
 
-- malformed/truncated payloads;
-- empty and singleton matrices;
-- high allele values and ploidy changes;
-- random-access row/column boundaries;
-- Python versus accelerated implementation equivalence;
-- golden binary fixtures from stable 1.x releases.
+- byte-exact v1 golden fixtures and structural corpus checks;
+- exhaustive truncation rejection and malformed framing/reference tests;
+- haploid, diploid, mixed-ploidy, missing-value, phase, and row-bin cases;
+- random-access boundary, sample-order, missing-metadata, and invalid-query tests;
+- Python/native parity for query expansion, row-bin decoding, permutation
+  decoding, and phase reconstruction;
+- multiprocessing parity and lifecycle/failure regressions;
+- real JBIG and pinned historical compatibility as release gates.
+
+Production-scale datasets, external historical `.gvc` artifacts, and
+non-Linux native validation remain controlled/offline release activities.
