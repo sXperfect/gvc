@@ -1,3 +1,4 @@
+from pathlib import Path
 from os.path import join
 
 import numpy as np
@@ -57,10 +58,14 @@ class Index:
 
     @classmethod
     def from_gvc_fpath(cls, input_fpath, decoder_context):
-        try:
-            return cls(input_fpath + ".metadata", decoder_context)
-        except FileNotFoundError:
+        index_path = Path(input_fpath + ".metadata")
+        if not index_path.exists():
             return None
+        if not index_path.is_dir():
+            raise NotADirectoryError(
+                "metadata sidecar is not a directory: {}".format(index_path)
+            )
+        return cls(str(index_path), decoder_context)
 
     @staticmethod
     def _validate_interval(start_pos, end_pos):
