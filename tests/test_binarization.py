@@ -139,3 +139,17 @@ def test_adaptive_max_value_accepts_reader_tensor():
         encoded.copy(), missing_value, na_value
     )
     np.testing.assert_array_equal(restored, source)
+
+
+
+def test_adaptive_missing_roundtrip_at_int8_upper_boundary():
+    source = np.array([[127, -1, -2, 0]], dtype=np.int8)
+
+    encoded, missing_value, na_value = binarization.adaptive_max_value(source)
+
+    assert int(missing_value) == 128
+    assert int(na_value) == 129
+    restored = binarization.undo_adaptive_max_value(
+        encoded, missing_value, na_value
+    )
+    np.testing.assert_array_equal(restored, source)
