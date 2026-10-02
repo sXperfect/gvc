@@ -29,72 +29,58 @@ def tensor_to_matrix(tensor):
     return matrix
 
 def simd_tensor_to_txt(allele_tensor, phasing_tensor):
-    m, n, p = allele_tensor.shape
+    """Render genotype tensors without single-character allele assumptions."""
+    allele_tensor = np.asarray(allele_tensor)
+    phasing_tensor = np.asarray(phasing_tensor)
 
-    max_val = allele_tensor.max()
-    avail_allele_vals = '.' + "".join(np.arange(max_val+1).astype(str))
-    avail_phase_val = '|/'
+    if allele_tensor.ndim != 3:
+        raise ValueError("allele tensor must be three-dimensional")
+    if phasing_tensor.ndim != 3:
+        raise ValueError("phasing tensor must be three-dimensional")
 
-    if p == 1:
-        # Keep one codebook entry per allele. np.array("...") would produce a
-        # scalar string and break indexed lookup for haploid genotypes.
-        codebook = list(avail_allele_vals)
-    elif p > 1:
-        codebook = ["".join(l) for l in it.product(avail_allele_vals, avail_phase_val, repeat=p-1)]
-        codebook = ["".join(l) for l in it.product(codebook, avail_allele_vals)]
-
-    def_val_idx = 0
-    for k in range(1, p):
-        def_val_idx += len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k)
-    def_val_idx += 1
-
-    allele_tensor += 1
-
-    flag_mask = allele_tensor == -1
-    complete_allele_mask = (np.logical_not(flag_mask)).all(axis=2)
-
-    gt_matrix_str = np.empty((m,n), dtype='<U{}'.format(2*p))
-
-    index_mat = np.zeros(gt_matrix_str.shape, dtype=int)
-    for k in range(1, p):
-        allele_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k)
-        allele_values = allele_tensor[complete_allele_mask, k-1].astype(
-            np.int64, copy=False
+    n_variants, n_samples, ploidy = allele_tensor.shape
+    expected_phase_shape = (n_variants, n_samples, max(0, ploidy - 1))
+    if phasing_tensor.shape != expected_phase_shape:
+        raise ValueError(
+            "phasing tensor shape does not match allele tensor/ploidy"
         )
-        index_mat[complete_allele_mask] += allele_values * allele_factor
-        phase_factor = len(avail_allele_vals) ** (p-k) * len(avail_phase_val) ** (p-k-1)
-        phase_values = phasing_tensor[complete_allele_mask, k-1].astype(
-            np.int64, copy=False
-        )
-        index_mat[complete_allele_mask] += phase_values * phase_factor
 
-    final_alleles = allele_tensor[complete_allele_mask, -1].astype(
-        np.int64, copy=False
-    )
-    index_mat[complete_allele_mask] += final_alleles
-    gt_matrix_str[complete_allele_mask] = np.array(codebook)[index_mat[complete_allele_mask]]
+    rows = []
+    for i_variant in range(n_variants):
+        genotypes = []
+        for i_sample in range(n_samples):
+            alleles = allele_tensor[i_variant, i_sample]
+            if int(alleles[0]) == -2:
+                genotypes.append("")
+                continue
 
-    if (flag_mask).any():
-        for i, j, k in np.argwhere(flag_mask):
-            sample_val = avail_allele_vals[allele_tensor[i, j, 0]]
-            for l in range(1, k):
-                sample_val = avail_allele_vals[allele_tensor[i, j, l]] + avail_phase_val[phasing_tensor[i, j, l-1]]
-
-            gt_matrix_str[i, j] = sample_val
-
-    delim_mat_str = np.full((m,n,1), '\t')
-    delim_mat_str[:, -1] = '\n'
-    gt_matrix_str = np.concatenate((np.expand_dims(gt_matrix_str,2), delim_mat_str), axis=2)
-    gt_matrix_str = tensor_to_matrix(gt_matrix_str)
-    
-    return "".join(gt_matrix_str.reshape(-1))
+            text = allele_val2str(int(alleles[0]))
+            for k in range(1, ploidy):
+                allele = int(alleles[k])
+                if allele == -2:
+                    break
+                phase = int(phasing_tensor[i_variant, i_sample, k - 1])
+                if phase not in (0, 1):
+                    raise ValueError("phasing value must be 0 or 1")
+                text += PHASING_VAL2CHAR[phase]
+                text += allele_val2str(allele)
+            genotypes.append(text)
+        rows.append("\t".join(genotypes))
+    return "\n".join(rows) + ("\n" if rows else "")
 
 def matrix_to_tensor(matrix, num_matrix):
+    matrix = np.asarray(matrix)
+    if matrix.ndim != 2:
+        raise ValueError("matrix must be two-dimensional")
+    if not isinstance(num_matrix, int) or isinstance(num_matrix, bool) or num_matrix <= 0:
+        raise ValueError("num_matrix must be a positive integer")
+    if matrix.shape[1] % num_matrix:
+        raise ValueError("matrix column count must be divisible by num_matrix")
 
     list_matrix = np.split(
-        np.expand_dims(matrix, axis=1), 
-        matrix.shape[1]//num_matrix, 
-        axis=2
+        np.expand_dims(matrix, axis=1),
+        matrix.shape[1] // num_matrix,
+        axis=2,
     )
 
     return np.concatenate(list_matrix, axis=1)
