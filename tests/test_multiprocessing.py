@@ -723,3 +723,128 @@ def test_supervisor_cancel_escalates_to_terminate_and_kill(tmp_path):
     assert proc.kill_calls == 1
     assert proc.alive is False
     assert len(proc.join_calls) >= 2
+
+
+def _abrupt_exit():
+    import os
+    os._exit(7)
+
+
+def test_supervisor_synthesizes_abrupt_child_exit(tmp_path):
+    import multiprocessing as local_mp
+
+    from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+    context = local_mp.get_context()
+    proc = context.Process(name="GVC-Abrupt", target=_abrupt_exit)
+    proc._gvc_stage = "encoder"
+    proc._gvc_worker_id = 3
+
+    supervisor = EncodeProcessSupervisor(
+        processes=[proc],
+        error_q=context.Queue(),
+        status_q=context.Queue(),
+        stop_event=context.Event(),
+        queues=[],
+        temp_output=tmp_path / "abrupt.tmp",
+        final_output=tmp_path / "abrupt.gvc",
+        poll_interval=0.02,
+        graceful_timeout=0.05,
+    )
+
+    with pytest.raises(MultiprocessingEncodeError) as exc_info:
+        supervisor.run()
+
+    assert any(
+        error.stage == "encoder"
+        and error.worker_id == 3
+        and error.error_type == "ProcessExit"
+        and "status 7" in error.message
+        for error in exc_info.value.errors
+    )
+    assert not proc.is_alive()
+    assert not (tmp_path / "abrupt.gvc").exists()
+
+
+@pytest.mark.skipif(
+    not hasattr(__import__("signal"), "SIGTERM"),
+    reason="SIGTERM is unavailable",
+)
+def test_real_parent_sigterm_cleans_child_processes_and_temp_artifacts(tmp_path):
+    import os
+    import signal
+    import subprocess
+    import sys
+    import textwrap
+
+    marker = tmp_path / "child.pid"
+    temp_output = tmp_path / "signal-integration.tmp"
+    final_output = tmp_path / "signal-integration.gvc"
+
+    script = textwrap.dedent(
+        """
+        import multiprocessing as mp
+        import os
+        import time
+        from pathlib import Path
+
+        from gvc.multiprocessing.supervisor import EncodeProcessSupervisor
+
+        marker = Path({marker!r})
+        temp_output = Path({temp_output!r})
+        final_output = Path({final_output!r})
+
+        def child():
+            marker.write_text(str(os.getpid()))
+            while True:
+                time.sleep(1)
+
+        if __name__ == "__main__":
+            context = mp.get_context()
+            proc = context.Process(name="GVC-Signal-Child", target=child)
+            proc._gvc_stage = "encoder"
+            proc._gvc_worker_id = 0
+            supervisor = EncodeProcessSupervisor(
+                processes=[proc],
+                error_q=context.Queue(),
+                status_q=context.Queue(),
+                stop_event=context.Event(),
+                queues=[],
+                temp_output=temp_output,
+                final_output=final_output,
+                poll_interval=0.02,
+                graceful_timeout=0.05,
+            )
+            try:
+                supervisor.run()
+            except BaseException:
+                raise SystemExit(143)
+        """.format(
+            marker=str(marker),
+            temp_output=str(temp_output),
+            final_output=str(final_output),
+        )
+    )
+
+    process = subprocess.Popen(
+        [sys.executable, "-c", script],
+        cwd=str(Path(__file__).resolve().parents[1]),
+    )
+    try:
+        deadline = __import__("time").time() + 10
+        while not marker.exists() and __import__("time").time() < deadline:
+            __import__("time").sleep(0.05)
+        assert marker.exists(), "child process did not start"
+
+        child_pid = int(marker.read_text())
+        os.kill(process.pid, signal.SIGTERM)
+        assert process.wait(timeout=10) == 143
+
+        with pytest.raises(ProcessLookupError):
+            os.kill(child_pid, 0)
+        assert not temp_output.exists()
+        assert not final_output.exists()
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
