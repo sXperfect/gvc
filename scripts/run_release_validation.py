@@ -32,6 +32,18 @@ def _run(command, env=None):
         )
 
 
+def _write_evidence(path, evidence):
+    if not path:
+        return
+    output = Path(path).resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(evidence, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print("release evidence: {}".format(output))
+
+
 def _package_version():
     namespace = {}
     version_file = ROOT / "gvc" / "_version.py"
@@ -203,7 +215,16 @@ def main(argv=None):
     readiness = [sys.executable, "scripts/check_release_readiness.py"]
     if args.rc:
         readiness.append("--rc")
-    _run(readiness)
+    try:
+        _run(readiness)
+    except Exception as exc:
+        evidence["steps"].append(
+            {"name": "static_release_readiness", "status": "fail", "error": str(exc)}
+        )
+        evidence["status"] = "fail"
+        evidence["completed_unix"] = time.time()
+        _write_evidence(args.evidence_output, evidence)
+        raise
     evidence["steps"].append({"name": "static_release_readiness", "status": "pass"})
 
     if args.rc:
@@ -265,7 +286,22 @@ def main(argv=None):
     ]
     if args.include_sorting:
         historical.append("--include-sorting")
-    _run(historical)
+    try:
+        _run(historical)
+    except Exception as exc:
+        evidence["steps"].append(
+            {
+                "name": "historical_fixture",
+                "status": "fail",
+                "error": str(exc),
+                "max_blocks": args.historical_max_blocks,
+                "include_sorting": bool(args.include_sorting),
+            }
+        )
+        evidence["status"] = "fail"
+        evidence["completed_unix"] = time.time()
+        _write_evidence(args.evidence_output, evidence)
+        raise
     evidence["steps"].append(
         {
             "name": "historical_fixture",
@@ -293,7 +329,23 @@ def main(argv=None):
     ]
     if args.start_method:
         benchmark += ["--start-method", args.start_method]
-    _run(benchmark)
+    try:
+        _run(benchmark)
+    except Exception as exc:
+        evidence["steps"].append(
+            {
+                "name": "release_benchmark",
+                "status": "fail",
+                "error": str(exc),
+                "workers": args.workers,
+                "repetitions": args.repetitions,
+                "start_method": args.start_method,
+            }
+        )
+        evidence["status"] = "fail"
+        evidence["completed_unix"] = time.time()
+        _write_evidence(args.evidence_output, evidence)
+        raise
     evidence["steps"].append(
         {
             "name": "release_benchmark",
@@ -318,7 +370,22 @@ def main(argv=None):
                 "--max-regression-percent",
                 str(args.max_regression_percent),
             ]
-        _run(compare)
+        try:
+            _run(compare)
+        except Exception as exc:
+            evidence["steps"].append(
+                {
+                    "name": "benchmark_comparison",
+                    "status": "fail",
+                    "error": str(exc),
+                    "baseline": _record_file(baseline),
+                    "max_regression_percent": args.max_regression_percent,
+                }
+            )
+            evidence["status"] = "fail"
+            evidence["completed_unix"] = time.time()
+            _write_evidence(args.evidence_output, evidence)
+            raise
         evidence["steps"].append(
             {
                 "name": "benchmark_comparison",
@@ -330,14 +397,7 @@ def main(argv=None):
 
     evidence["status"] = "pass"
     evidence["completed_unix"] = time.time()
-    if args.evidence_output:
-        output = Path(args.evidence_output).resolve()
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(
-            json.dumps(evidence, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
-        print("release evidence: {}".format(output))
+    _write_evidence(args.evidence_output, evidence)
 
     return 0
 
