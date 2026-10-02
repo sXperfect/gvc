@@ -62,3 +62,34 @@ def test_non_taggable_versions_do_not_have_release_tags(version):
     assert not policy.is_taggable(version)
     with pytest.raises(ValueError, match="not taggable"):
         policy.expected_tag(version)
+
+
+@pytest.mark.parametrize(
+    "current,target",
+    [
+        ("1.0.1.dev0", "1.0.1rc1"),
+        ("1.0.1.dev3", "1.0.1rc2"),
+        ("1.0.1rc1", "1.0.1rc2"),
+        ("1.0.1rc2", "1.0.1"),
+    ],
+)
+def test_allowed_version_promotions(current, target):
+    policy = MODULE._load_version_policy()
+    assert policy.validate_transition(current, target)
+
+
+@pytest.mark.parametrize(
+    "current,target",
+    [
+        ("1.0.1.dev0", "1.0.1"),
+        ("1.0.1.dev0", "1.0.2rc1"),
+        ("1.0.1rc2", "1.0.1rc1"),
+        ("1.0.1rc1", "1.0.2"),
+        ("1.0.1", "1.0.1rc2"),
+        ("1.0.1", "1.0.2"),
+    ],
+)
+def test_forbidden_version_promotions(current, target):
+    policy = MODULE._load_version_policy()
+    with pytest.raises(ValueError):
+        policy.validate_transition(current, target)
