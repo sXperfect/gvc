@@ -197,7 +197,15 @@ def vcf_genotypes_reader(fpath, out_fpath, block_size):
                     "allele/phasing columns"
                 )
 
-            allele_matrix[i_var, :, :] = genotypes[:, :current_p]
+            allele_values = genotypes[:, :current_p]
+            signed_info = np.iinfo(gvc.common.SIGNED_ALLELE_DTYPE)
+            if np.any(allele_values < -2) or np.any(allele_values > signed_info.max):
+                raise ValueError(
+                    "VCF allele index is outside the supported range -2..{}".format(
+                        signed_info.max
+                    )
+                )
+            allele_matrix[i_var, :, :] = allele_values
             if current_p > 1:
                 # cyvcf2 uses True for "|" while GVC serializes 0 for "|" and
                 # 1 for "/". A single cyvcf2 phase flag is broadcast across
