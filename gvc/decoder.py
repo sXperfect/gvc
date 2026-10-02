@@ -689,6 +689,7 @@ class Decoder(object):
     ):
         
         block_size = None
+        reader_it = None
         for i_access_unit in range(self.num_access_units):
             self.decoder_context.set_access_unit(i_access_unit)
             
@@ -716,17 +717,34 @@ class Decoder(object):
                 )
                 
                 #? Compare
-                assert np.array_equal(allele_matrix, recon_allele_matrix), "Allele matrix differ".format(i_access_unit, i_block)
+                if not np.array_equal(allele_matrix, recon_allele_matrix):
+                    raise ValueError(
+                        "allele matrix differs at access unit {} block {}".format(
+                            i_access_unit, i_block
+                        )
+                    )
 
                 #? Handle phasing value. If the phasing matrix is uniform, take a single value for the comparison
                 if np.all(phasing_matrix == 0) or np.all(phasing_matrix == 1):
                     phasing_val = phasing_matrix[0][0]
-                    assert phasing_val == recon_phasing_mat, "Phasing value differ".format(i_access_unit, i_block)
-                else:
-                    assert np.array_equal(phasing_matrix, recon_phasing_mat)
+                    if phasing_val != recon_phasing_mat:
+                        raise ValueError(
+                            "phasing value differs at access unit {} block {}".format(
+                                i_access_unit, i_block
+                            )
+                        )
+                elif not np.array_equal(phasing_matrix, recon_phasing_mat):
+                    raise ValueError(
+                        "phasing matrix differs at access unit {} block {}".format(
+                            i_access_unit, i_block
+                        )
+                    )
                     
                 log.info("Contents match!".format(i_access_unit, i_block))
                 
+        if reader_it is None:
+            reader_it = iter(vcf_genotypes_reader(orig_fpath, None, 1))
+
         try:
             next(reader_it)
             raise ValueError("There are more data in the original vcf file than the encoded one!")
