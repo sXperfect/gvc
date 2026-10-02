@@ -26,7 +26,11 @@ from .multiprocessing import (
     WorkerDone,
     WriterDone,
 )
-from .multiprocessing.supervisor import child_entry
+from .multiprocessing.supervisor import (
+    child_entry,
+    cleanup_output_pair,
+    commit_output_pair,
+)
 
 def run_core(
     raw_block:t.List, 
@@ -95,76 +99,95 @@ def run_no_threads(
 ):
     log.info('run without multithreading')
 
-    with open(output_fpath, 'wb') as output_f:
+    output_fpath = _validate_parallel_output_path(output_fpath)
+    temp_output = _temp_output_path(output_fpath)
+    cleanup_output_pair(temp_output)
 
-        ac_unit_param_set = None  # Act as pointer, pointing to parameter set of current AccessUnit
-        acc_unit_id = 0
-        blocks = []
-        param_sets = []
+    try:
+        with open(temp_output, 'wb') as output_f:
 
-        num_bytes_per_block = []
-        max_num_blocks_per_acc_unit = 2**(ds.consts.NUM_BLOCKS_LEN * 8) - 1
+            ac_unit_param_set = None  # Act as pointer, pointing to parameter set of current AccessUnit
+            acc_unit_id = 0
+            blocks = []
+            param_sets = []
 
-        if input_fpath.endswith('.vcf'):
-            iterator = reader.vcf_genotypes_reader(input_fpath, output_fpath, block_size)
-        elif input_fpath.endswith('vcf.gz'):
-            iterator = reader.vcf_genotypes_reader(input_fpath, output_fpath, block_size)
-        else:
-            raise ValueError('Invalid Format')
+            num_bytes_per_block = []
+            max_num_blocks_per_acc_unit = 2**(ds.consts.NUM_BLOCKS_LEN * 8) - 1
 
-        for block_ID, raw_block in enumerate(iterator):
-            log.info(f"Processing block {block_ID}")          
-            block, new_param_set = run_core(raw_block, ps_params, tsp_params)
-            
-            num_bytes_per_block.append(len(block))
-            
-            #? If parameter set of current block different from parameter set of current access unit,
-            #? store blocks as access unit
-            if ac_unit_param_set is None:
-                log.info('Set to new parameter set')
-                ac_unit_param_set = new_param_set
-                param_sets.append(ac_unit_param_set)
-                output_f.write(ac_unit_param_set.to_bytes())
+            if input_fpath.endswith('.vcf'):
+                iterator = reader.vcf_genotypes_reader(
+                    input_fpath, temp_output, block_size
+                )
+            elif input_fpath.endswith('vcf.gz'):
+                iterator = reader.vcf_genotypes_reader(
+                    input_fpath, temp_output, block_size
+                )
+            else:
+                raise ValueError('Invalid Format')
 
-            elif new_param_set != ac_unit_param_set or len(blocks) == max_num_blocks_per_acc_unit:
-                log.info('New parameter set found, store blocks')
+            for block_ID, raw_block in enumerate(iterator):
+                log.info(f"Processing block {block_ID}")
+                block, new_param_set = run_core(raw_block, ps_params, tsp_params)
 
-                # Store blocks as an Access Unit
-                log.info('Store access unit ID {:03d}'.format(acc_unit_id))
-                gvc.common.store_access_unit(output_f, acc_unit_id, ac_unit_param_set, blocks)
+                num_bytes_per_block.append(len(block))
 
-                # Initialize values for the new AccessUnit
-                acc_unit_id += 1
-                blocks.clear()
-
-                #? Check if similar parameter set is already created before                       
-                is_param_set_unique = True
-                for stored_param_set in param_sets:
-                    if stored_param_set == new_param_set:
-                        is_param_set_unique = False
-                        break
-                
-                #? If parameter set is unique, store in list of parameter sets and store in GVC file
-                if is_param_set_unique:
-                    log.info('New parameter set is unique')
-                    new_param_set.parameter_set_id = len(param_sets)
-
+                #? If parameter set of current block different from parameter set of current access unit,
+                #? store blocks as access unit
+                if ac_unit_param_set is None:
+                    log.info('Set to new parameter set')
                     ac_unit_param_set = new_param_set
-
                     param_sets.append(ac_unit_param_set)
                     output_f.write(ac_unit_param_set.to_bytes())
 
-                else:
-                    log.info('New parameter set is not unique')
-                    del new_param_set
-                    ac_unit_param_set = stored_param_set
+                elif new_param_set != ac_unit_param_set or len(blocks) == max_num_blocks_per_acc_unit:
+                    log.info('New parameter set found, store blocks')
 
-            blocks.append(block)
+                    # Store blocks as an Access Unit
+                    log.info('Store access unit ID {:03d}'.format(acc_unit_id))
+                    gvc.common.store_access_unit(output_f, acc_unit_id, ac_unit_param_set, blocks)
 
-        if len(blocks):
-            #? Store the remaining blocks
-            log.info('Store the remaining blocks')
-            gvc.common.store_access_unit(output_f, acc_unit_id, ac_unit_param_set, blocks)
+                    # Initialize values for the new AccessUnit
+                    acc_unit_id += 1
+                    blocks.clear()
+
+                    #? Check if similar parameter set is already created before
+                    is_param_set_unique = True
+                    for stored_param_set in param_sets:
+                        if stored_param_set == new_param_set:
+                            is_param_set_unique = False
+                            break
+
+                    #? If parameter set is unique, store in list of parameter sets and store in GVC file
+                    if is_param_set_unique:
+                        log.info('New parameter set is unique')
+                        new_param_set.parameter_set_id = len(param_sets)
+
+                        ac_unit_param_set = new_param_set
+
+                        param_sets.append(ac_unit_param_set)
+                        output_f.write(ac_unit_param_set.to_bytes())
+
+                    else:
+                        log.info('New parameter set is not unique')
+                        del new_param_set
+                        ac_unit_param_set = stored_param_set
+
+                blocks.append(block)
+
+            if len(blocks):
+                #? Store the remaining blocks
+                log.info('Store the remaining blocks')
+                gvc.common.store_access_unit(
+                    output_f, acc_unit_id, ac_unit_param_set, blocks
+                )
+
+            output_f.flush()
+            os.fsync(output_f.fileno())
+
+        commit_output_pair(temp_output, output_fpath)
+    except BaseException:
+        cleanup_output_pair(temp_output)
+        raise
             
 def _queue_put(target_queue, item, stop_event, timeout=0.2):
     while not stop_event.is_set():
