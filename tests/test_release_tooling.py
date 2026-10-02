@@ -100,3 +100,30 @@ def test_artifact_version_policy_rejects_development_versions():
     # Development branches are intentionally not taggable as RC/final.
     if "dev" in check_release_tag.package_version():
         assert check_release_tag.package_version() != "1.0.1rc1"
+
+
+def test_ci_all_includes_complete_automated_gate_sequence():
+    from scripts import ci
+
+    seen = []
+
+    original = dict(ci.GATES)
+    try:
+        for name in ci.GATES:
+            ci.GATES[name] = lambda name=name: seen.append(name) or 0
+        assert ci.all_gates() == 0
+    finally:
+        ci.GATES.clear()
+        ci.GATES.update(original)
+
+    assert seen == [
+        "metadata",
+        "syntax",
+        "native",
+        "test",
+        "cli",
+        "packaging",
+        "release",
+        "optional",
+        "deps",
+    ]
