@@ -32,6 +32,20 @@ def _sort_matrix(
     sorted_bin_mat = working.copy()
     log.debug("Matrix shape: %s", working.shape)
 
+    max_perm_entries = np.iinfo(PERMUTATION_DTYPE).max
+    if sort_row and working.shape[0] > max_perm_entries:
+        raise ValueError(
+            "row sorting exceeds permutation format limit of {}".format(
+                max_perm_entries
+            )
+        )
+    if sort_col and working.shape[1] > max_perm_entries:
+        raise ValueError(
+            "column sorting exceeds permutation format limit of {}".format(
+                max_perm_entries
+            )
+        )
+
     if sort_row:
         if solver.req_dist_mat:
             with catchtime() as timer:
