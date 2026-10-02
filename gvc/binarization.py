@@ -4,6 +4,7 @@ import time
 
 import numpy as np
 import itertools as it
+import re
 
 import gvc.common
 
@@ -337,128 +338,91 @@ def undo_adaptive_max_value(allele_array, missing_rep_val, na_rep_val):
     return allele_array.astype(gvc.common.SIGNED_ALLELE_DTYPE)
 
 def split_genotype_matrix(genotype_matrix: List[str]):
-    r"""
-    Split genotype matrix into the corresponding allele and phasing matrices.
-    Implements 4.1
+    """Split tab-separated genotype text into allele/phasing matrices."""
+    if not genotype_matrix:
+        raise ValueError("genotype_matrix must not be empty")
 
-    Parameters
-    ----------
-    genotype_matrix : list of string
-        The genotype matrix
+    rows = []
+    expected_cols = None
+    max_ploidy = 0
 
-    Returns
-    -------
-    allele_tensor : ndarray
-        The allele tensor (3d)
-    phasing_tensor : ndarray
-        The phasing tensor (3d)
-    """
+    for i_row, line in enumerate(genotype_matrix):
+        cells = line.rstrip("\n").split("\t")
+        if expected_cols is None:
+            expected_cols = len(cells)
+            if expected_cols == 0:
+                raise ValueError("genotype rows must contain at least one sample")
+        elif len(cells) != expected_cols:
+            raise ValueError("genotype rows have inconsistent sample counts")
 
-    log.debug('splitting genotype matrix')
+        parsed_row = []
+        for cell in cells:
+            if cell == "":
+                alleles = []
+                phases = []
+            else:
+                parts = re.split(r"([|/])", cell)
+                alleles = parts[::2]
+                phases = parts[1::2]
+                if not alleles or any(value == "" for value in alleles):
+                    raise ValueError(
+                        "invalid genotype at row {}: {!r}".format(i_row, cell)
+                    )
+                if len(phases) != len(alleles) - 1:
+                    raise ValueError(
+                        "invalid genotype separators at row {}: {!r}".format(
+                            i_row, cell
+                        )
+                    )
+                if any(phase not in _phasing_dict for phase in phases):
+                    raise ValueError(
+                        "invalid genotype phase separator at row {}: {!r}".format(
+                            i_row, cell
+                        )
+                    )
 
-    # Convert to numpy array and split by tabulator
-    genotype_matrix = np.array([x.split('\t') for x in genotype_matrix])
-    genotype_matrix[:,-1] = [x.strip() for x in genotype_matrix[:,-1]] # remove "\n" in last column
+            max_ploidy = max(max_ploidy, len(alleles))
+            parsed_row.append((alleles, phases))
+        rows.append(parsed_row)
 
-    m,n = genotype_matrix.shape
-    #p = int((len(genotype_matrix[0][0].split('\t')[0]) + 1) / 2)  # 1 for phasing & 1 for genotype
-    p_candidates = ((np.vectorize(len)(genotype_matrix[0,:]) + 1) / 2).astype(int) # TODO: is it sufficient to check only first column?
-    p = np.max(p_candidates)
+    if max_ploidy <= 0:
+        raise ValueError("genotype matrix does not contain any allele values")
 
-    allele_tensor = np.zeros([m, n, p], dtype=gvc.common.SIGNED_ALLELE_DTYPE)
-
-    if p-1 > 0:
-        phasing_tensor = np.zeros([m, n, (p - 1)], dtype=gvc.common.PHASING_DTYPE)
+    n_rows = len(rows)
+    n_samples = expected_cols
+    allele_tensor = np.full(
+        (n_rows, n_samples, max_ploidy),
+        -2,
+        dtype=gvc.common.SIGNED_ALLELE_DTYPE,
+    )
+    if max_ploidy > 1:
+        phasing_tensor = np.zeros(
+            (n_rows, n_samples, max_ploidy - 1),
+            dtype=gvc.common.PHASING_DTYPE,
+        )
     else:
         phasing_tensor = None
 
-    # allele_tensor and phasing_tensor are initialized assuming the default case "0|...0" in genotype_matrix
-    all_zeros_template = "|".join(np.repeat('0', p)) # default template
+    for i_row, parsed_row in enumerate(rows):
+        for i_sample, (alleles, phases) in enumerate(parsed_row):
+            for i_allele, allele in enumerate(alleles):
+                allele_tensor[i_row, i_sample, i_allele] = _gt_code_to_int(
+                    allele
+                )
+            if phasing_tensor is not None:
+                for i_phase, phase in enumerate(phases):
+                    phasing_tensor[i_row, i_sample, i_phase] = _phasing_dict[
+                        phase
+                    ]
 
-    # Here we construct templates with the most common (binary) cases
-    # either all phased or all unphased (we handle the rest later in a slow for loop)
-    na_templates_str = np.array(['0', '1'])
-    binary_phased   = np.array(["|".join(x) for x in list(it.product('01', repeat=p))])
-    binary_phased   = np.concatenate((binary_phased, na_templates_str)) # add single values as well
-    binary_unphased = np.array(["/".join(x) for x in list(it.product('01', repeat=p))])
-    binary_templates_str = np.concatenate((binary_phased, binary_unphased))
-
-    # Same templates, now as int
-    na_templates_int = (-2)*np.ones((2, p))
-    na_templates_int[0,0] = 0; na_templates_int[1,0] = 1
-    binary_templates_int = np.arange(2**(p))[:, np.newaxis] >> np.arange(p)[::-1] & 1
-    binary_templates_int = np.concatenate((binary_templates_int, na_templates_int, binary_templates_int))
-    
-    # Store cases which we have to handle later
-    handle_later_mask = genotype_matrix != all_zeros_template
-
-    # Loop over templates
-    for idx, bt in enumerate(binary_templates_str[1:],1):
-        mask = genotype_matrix == bt
-        allele_tensor[mask] = binary_templates_int[idx,:]
-        if phasing_tensor is not None:
-            phasing_tensor[mask] = idx >= len(binary_phased)
-        handle_later_mask[mask] = False # We don't need to handle these cases later!
-
-
-    # Slow loop for more complicated cases only
-    if handle_later_mask.any():
-        for i in range(m):
-            for j in range(n):
-                if not handle_later_mask[i,j]:
-                    continue # skip # TODO: this is still slow, reduce for loop to iterate only over elements for which mask[i,j] is True
-                else:
-                    try:
-                        allele_tensor[i, j, 0] = _gt_code_to_int(genotype_matrix[i,j][0])
-                    except ValueError:
-                        log.error('Could not parse row {}: {}'.format(i, genotype_matrix[i,:]))
-                        raise ValueError('Could not parse row {}: {}'.format(i, genotype_matrix[i,:]))
-
-                    p_new = (len(genotype_matrix[i,j])+1)//2
-                    if p_new > p:
-                        # Insert additional depth with values -2, which represent *NotAvailable*
-                        allele_tensor = np.concatenate((
-                            allele_tensor,
-                            -2*np.ones([m, n, p_new - p], dtype=gvc.common.SIGNED_ALLELE_DTYPE)
-                        ), axis=2)
-
-                        additional_depth = np.zeros([m, n, p_new-p], dtype=bool)
-                        if phasing_tensor is None:
-                            phasing_tensor = additional_depth
-                        else:
-                            phasing_tensor = np.concatenate((phasing_tensor, additional_depth), axis=2)
-
-                        p = p_new
-
-                    for k in range(1, p):
-                        try:
-                            gt_code = genotype_matrix[i,j][2*k]
-                            phase = genotype_matrix[i,j][2*k-1]
-
-                            phasing_tensor[i, j, k-1] = _phasing_dict[phase]
-                        except IndexError:
-                            ### Adaptive Max Value preprocessing
-                            # GT code is set to -2
-                            gt_code = -2
-                            # Phase of *NotAvailable* is arbitrarily set
-                            phase = 0
-
-                            phasing_tensor[i, j, k-1] = phase
-
-                        try:
-                            if gt_code != -2:
-                                allele_tensor[i, j, k] = _gt_code_to_int(gt_code)
-                            else:
-                                allele_tensor[i, j, k] = -2
-                        except ValueError:
-                            log.error('Could not parse row {}: {}'.format(i, genotype_matrix[i,:]))
-                            raise ValueError('Could not parse row {}: {}'.format(i, genotype_matrix[i,:]))
-
-    if phasing_tensor is not None:
-        return _tensor_to_matrix(allele_tensor), _tensor_to_matrix(phasing_tensor), p
-    else:
-        return _tensor_to_matrix(allele_tensor), None, p
-
+    allele_matrix = _tensor_to_matrix(allele_tensor)
+    if phasing_tensor is None:
+        return allele_matrix, None, max_ploidy
+    return (
+        allele_matrix,
+        _tensor_to_matrix(phasing_tensor),
+        max_ploidy,
+    )
 
 def bin_bit_plane(matrix, axis=None, **kwargs):
     """
