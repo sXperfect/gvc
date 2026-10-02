@@ -164,3 +164,9 @@ def test_matrix_to_tensor_rejects_invalid_grouping():
 
     with pytest.raises(ValueError, match="divisible"):
         binarization.matrix_to_tensor(matrix, 2)
+
+
+
+def test_split_genotype_matrix_rejects_allele_above_int8_range():
+    with pytest.raises(ValueError, match="supported range"):
+        binarization.split_genotype_matrix(["128|0\n"])
