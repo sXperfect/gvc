@@ -34,3 +34,16 @@ def install():
 
     MAT_CODECS[CodecID.JBIG1]["encoder"] = encode
     MAT_CODECS[CodecID.JBIG1]["decoder"] = decode
+
+
+
+def signal_child(marker_path):
+    """Importable child target for signal-cleanup multiprocessing tests."""
+    import os
+    import time
+    from pathlib import Path
+
+    marker = Path(marker_path)
+    marker.write_text(str(os.getpid()))
+    while True:
+        time.sleep(1)
