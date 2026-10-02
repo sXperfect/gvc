@@ -13,6 +13,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+HISTORICAL_FIXTURE_GIT_BLOB = "af45a419e46563906ac51fad0be869291316cea9"
 
 
 def _run(command, env=None):
@@ -211,6 +212,23 @@ def main(argv=None):
         },
         "steps": [],
     }
+    if args.rc and evidence["fixture"]["git_blob"] != HISTORICAL_FIXTURE_GIT_BLOB:
+        evidence["steps"].append(
+            {
+                "name": "historical_fixture_identity",
+                "status": "fail",
+                "error": (
+                    "RC validation requires pinned historical fixture blob {}"
+                    .format(HISTORICAL_FIXTURE_GIT_BLOB)
+                ),
+                "actual_git_blob": evidence["fixture"]["git_blob"],
+            }
+        )
+        evidence["status"] = "fail"
+        evidence["completed_unix"] = time.time()
+        _write_evidence(args.evidence_output, evidence)
+        raise RuntimeError("RC validation historical fixture identity mismatch")
+
     if args.rc and evidence["git_dirty"]:
         evidence["steps"].append(
             {
