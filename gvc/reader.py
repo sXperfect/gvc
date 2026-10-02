@@ -84,9 +84,13 @@ class MetaHandler:
         np.save(join(self.metadata_dpath, str(block_id)), positions)
 
     def end(self):
-        if not self.is_enabled or not self.min_max_pos_list:
+        if not self.is_enabled:
             return
-        np.save(join(self.metadata_dpath, "main"), np.stack(self.min_max_pos_list))
+        if self.min_max_pos_list:
+            root = np.stack(self.min_max_pos_list)
+        else:
+            root = np.empty((0, 2), dtype=np.uint64)
+        np.save(join(self.metadata_dpath, "main"), root)
 
 
 def reshape_trans_mat(mat, axis):
