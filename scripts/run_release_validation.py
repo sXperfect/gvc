@@ -394,6 +394,7 @@ def main(argv=None):
             str(benchmark_output),
             "--require-same-configurations",
             "--require-compatible-environment",
+            "--require-complete-metrics",
             "--output",
             str(comparison_output),
         ]
