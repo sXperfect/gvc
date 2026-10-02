@@ -90,6 +90,18 @@ def run_core(
     
     return block, new_param_set
 
+def _next_parameter_set_id(param_sets):
+    next_id = len(param_sets)
+    limit = 1 << (ds.consts.PARAMETER_SET_ID_LEN * 8)
+    if next_id >= limit:
+        raise ValueError(
+            "parameter-set count exceeds serialized ID limit of {}".format(
+                limit
+            )
+        )
+    return next_id
+
+
 def run_no_threads(
     input_fpath:str,
     output_fpath,
@@ -161,7 +173,9 @@ def run_no_threads(
                     #? If parameter set is unique, store in list of parameter sets and store in GVC file
                     if is_param_set_unique:
                         log.info('New parameter set is unique')
-                        new_param_set.parameter_set_id = len(param_sets)
+                        new_param_set.parameter_set_id = _next_parameter_set_id(
+                        param_sets
+                    )
 
                         ac_unit_param_set = new_param_set
 
@@ -692,7 +706,9 @@ def _store_ordered_block(
             None,
         )
         if stored_match is None:
-            new_param_set.parameter_set_id = len(param_sets)
+            new_param_set.parameter_set_id = _next_parameter_set_id(
+                param_sets
+            )
             ac_unit_param_set = new_param_set
             param_sets.append(ac_unit_param_set)
             output_f.write(ac_unit_param_set.to_bytes())
