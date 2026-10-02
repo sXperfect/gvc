@@ -229,42 +229,56 @@ def main(argv=None):
 
     if args.rc:
         dist_dir = ROOT / "tmp" / "release-validation" / "dist"
-        if dist_dir.exists():
-            import shutil
-            shutil.rmtree(str(dist_dir))
-        dist_dir.mkdir(parents=True, exist_ok=True)
-        _run([
-            sys.executable,
-            "-m",
-            "build",
-            "--wheel",
-            "--sdist",
-            "--outdir",
-            str(dist_dir),
-        ])
-        version = _package_version()
-        wheels = sorted(dist_dir.glob("gvc-*.whl"))
-        sdists = sorted(dist_dir.glob("gvc-*.tar.gz"))
-        if len(wheels) != 1 or len(sdists) != 1:
-            raise RuntimeError("expected exactly one wheel and one sdist")
-        artifact_evidence = (
-            ROOT / "tmp" / "release-validation" / "artifacts.json"
-        )
-        _run([
-            sys.executable,
-            "scripts/check_release_artifacts.py",
-            "--wheel",
-            str(wheels[0]),
-            "--sdist",
-            str(sdists[0]),
-            "--version",
-            version,
-            "--output",
-            str(artifact_evidence),
-        ])
-        artifact_data = json.loads(
-            artifact_evidence.read_text(encoding="utf-8")
-        )
+        try:
+            if dist_dir.exists():
+                import shutil
+                shutil.rmtree(str(dist_dir))
+            dist_dir.mkdir(parents=True, exist_ok=True)
+            _run([
+                sys.executable,
+                "-m",
+                "build",
+                "--wheel",
+                "--sdist",
+                "--outdir",
+                str(dist_dir),
+            ])
+            version = _package_version()
+            wheels = sorted(dist_dir.glob("gvc-*.whl"))
+            sdists = sorted(dist_dir.glob("gvc-*.tar.gz"))
+            if len(wheels) != 1 or len(sdists) != 1:
+                raise RuntimeError("expected exactly one wheel and one sdist")
+            artifact_evidence = (
+                ROOT / "tmp" / "release-validation" / "artifacts.json"
+            )
+            _run([
+                sys.executable,
+                "scripts/check_release_artifacts.py",
+                "--wheel",
+                str(wheels[0]),
+                "--sdist",
+                str(sdists[0]),
+                "--version",
+                version,
+                "--output",
+                str(artifact_evidence),
+            ])
+            artifact_data = json.loads(
+                artifact_evidence.read_text(encoding="utf-8")
+            )
+        except Exception as exc:
+            evidence["steps"].append(
+                {
+                    "name": "release_artifacts",
+                    "status": "fail",
+                    "error": str(exc),
+                    "version": _package_version(),
+                }
+            )
+            evidence["status"] = "fail"
+            evidence["completed_unix"] = time.time()
+            _write_evidence(args.evidence_output, evidence)
+            raise
         evidence["steps"].append(
             {
                 "name": "release_artifacts",
