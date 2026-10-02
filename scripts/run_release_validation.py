@@ -378,6 +378,7 @@ def main(argv=None):
             str(baseline),
             str(benchmark_output),
             "--require-same-configurations",
+            "--require-compatible-environment",
         ]
         if args.max_regression_percent is not None:
             compare += [
