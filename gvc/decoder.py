@@ -392,8 +392,11 @@ def _get_tensor_shape(
             header_bytes = enc_var.variants_payloads[i_bin_mat].read(jbig.BIE_HEADER_LEN)
             bin_mat_nrows, bin_mat_ncols = jbig.get_shape(header_bytes)
         else:
-            # TODO: for additional codec
-            raise NotImplementedError("")
+            raise ValueError(
+                "unsupported codec id for matrix shape inspection: {}".format(
+                    param_set.variants_coder_ids[i_bin_mat]
+                )
+            )
 
         if param_set.transpose_variants_mat_flags[i_bin_mat]:
 
