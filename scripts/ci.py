@@ -160,7 +160,7 @@ def _run_external(cmd, cwd, env=None):
     )
 
 
-def _install_and_smoke_artifact(artifact, name):
+def install_and_smoke_artifact(artifact, name):
     venv_dir = PACKAGE_VENV_ROOT / name
     if venv_dir.exists():
         shutil.rmtree(str(venv_dir))
@@ -251,10 +251,14 @@ def packaging_gate():
         print("artifact inspection failed: {}".format(exc), file=sys.stderr)
         return 2
 
-    status = _install_and_smoke_artifact(wheels[0], "wheel")
+    status = install_and_smoke_artifact(wheels[0], "wheel")
     if status:
         return status
-    return _install_and_smoke_artifact(sdists[0], "sdist")
+    return install_and_smoke_artifact(sdists[0], "sdist")
+
+# Backward-compatible private alias for older callers/tests.
+_install_and_smoke_artifact = install_and_smoke_artifact
+
 
 def cli_gate():
     return run([sys.executable, "-m", "gvc", "--help"])
